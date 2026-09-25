@@ -53,10 +53,10 @@ public class AccountService {
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
-    public BigDecimal getBalance(String accountNumber) {
+    public AccountResponse getBalance(String accountNumber) {
         AccountEntity account = accountRepository
                 .findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new AccountNotFoundException("Account not found"));
-        return account.getBalance();
+        return new AccountResponse(accountNumber, account.getBalance());
     }
 }
