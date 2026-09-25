@@ -3,6 +3,7 @@ package com.eddiapps.banking.exception;
 import com.eddiapps.banking.dto.ErrorResponse;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,21 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 exception.getMessage(),
+                Instant.now()
+        );
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidAmount(MethodArgumentNotValidException exception) {
+        var fieldError = exception.getBindingResult().getFieldError();
+        String message = fieldError != null
+                ? fieldError.getDefaultMessage()
+                : "Validation failed";
+
+        return new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                message,
                 Instant.now()
         );
     }
