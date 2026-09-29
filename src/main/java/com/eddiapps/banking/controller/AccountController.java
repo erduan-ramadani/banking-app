@@ -2,6 +2,7 @@ package com.eddiapps.banking.controller;
 
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.dto.AmountRequest;
+import com.eddiapps.banking.dto.TransferRequest;
 import com.eddiapps.banking.service.AccountService;
 
 import org.springframework.web.bind.annotation.*;
@@ -38,5 +39,16 @@ public class AccountController {
             @PathVariable String accountNumber
     ) {
         return accountService.getBalance(accountNumber);
+    }
+
+    @PostMapping("/transfer")
+    AccountResponse transfer(
+            @Valid @RequestBody TransferRequest request
+    ) {
+        return accountService.transfer(
+                request.senderAccountNumber(),
+                request.recipientAccountNumber(),
+                request.amount()
+        );
     }
 }
