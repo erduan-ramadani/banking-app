@@ -70,7 +70,7 @@ public class AccountService {
     }
 
     @Transactional
-    public void transfer(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
+    public AccountResponse transfer(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
         }
@@ -92,5 +92,6 @@ public class AccountService {
 
         senderAccount.setBalance(senderAccount.getBalance().subtract(amount));
         recipientAccount.setBalance(recipientAccount.getBalance().add(amount));
+        return new AccountResponse(senderAccountNumber, senderAccount.getBalance());
     }
 }
