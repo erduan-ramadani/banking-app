@@ -9,6 +9,7 @@ import com.eddiapps.banking.entity.AccountEntity;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidAmountException;
+import com.eddiapps.banking.exception.InvalidTransferException;
 import com.eddiapps.banking.repository.AccountRepository;
 
 import org.junit.jupiter.api.Test;
@@ -160,4 +161,104 @@ public class AccountServiceTest {
         verify(accountRepository).findByAccountNumber("99");
     }
 
+    @Test
+    void transfer_withExistingAccounts_returnsBalance() {
+        AccountEntity sender = new AccountEntity("1");
+        sender.setBalance(BigDecimal.valueOf(100));
+
+        AccountEntity recipient = new AccountEntity("2");
+        recipient.setBalance(BigDecimal.valueOf(50));
+
+        when(accountRepository.findByAccountNumber("1"))
+                .thenReturn(Optional.of(sender));
+        when(accountRepository.findByAccountNumber("2"))
+                .thenReturn(Optional.of(recipient));
+
+        AccountResponse response = accountService.transfer(
+                sender.getAccountNumber(),
+                recipient.getAccountNumber(),
+                BigDecimal.valueOf(40)
+        );
+
+        assertEquals(0, sender.getBalance().compareTo(BigDecimal.valueOf(60)));
+        assertEquals(0, recipient.getBalance().compareTo(BigDecimal.valueOf(90)));
+        assertEquals(0, response.balance().compareTo(BigDecimal.valueOf(60)));
+
+        verify(accountRepository).findByAccountNumber("1");
+        verify(accountRepository).findByAccountNumber("2");
+    }
+
+    @Test
+    void transfer_withInvalidAmount_throwsInvalidAmountException() {
+        assertThrows(InvalidAmountException.class, () -> accountService.transfer(
+                        "1",
+                        "2",
+                        BigDecimal.ZERO
+                )
+        );
+
+        verify(accountRepository, never()).findByAccountNumber("1");
+        verify(accountRepository, never()).findByAccountNumber("2");
+    }
+
+    @Test
+    void transfer_withSameAccountNumbers_throwsInvalidTransferException() {
+        assertThrows(InvalidTransferException.class, () -> accountService.transfer(
+                        "1",
+                        "1",
+                        BigDecimal.valueOf(100)
+                )
+        );
+
+        verify(accountRepository, never()).findByAccountNumber("1");
+    }
+
+    @Test
+    void transfer_withUnknownSender_throwsAccountNotFoundException() {
+        when(accountRepository.findByAccountNumber("99")).thenReturn(Optional.empty());
+
+        assertThrows(AccountNotFoundException.class, () -> accountService.transfer(
+                "99",
+                "1",
+                BigDecimal.valueOf(100))
+        );
+
+        verify(accountRepository, never()).findByAccountNumber("1");
+    }
+
+    @Test
+    void transfer_withUnknownRecipient_throwsAccountNotFoundException() {
+        AccountEntity sender = new AccountEntity("1");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(sender));
+        when(accountRepository.findByAccountNumber("99")).thenReturn(Optional.empty());
+
+        assertThrows(AccountNotFoundException.class, () -> accountService.transfer(
+                "1",
+                "99",
+                BigDecimal.valueOf(100))
+        );
+    }
+
+    @Test
+    void transfer_withInsufficientFunds_throwsInsufficientFundsException() {
+        AccountEntity sender = new AccountEntity("1");
+        AccountEntity recipient = new AccountEntity("2");
+
+        sender.setBalance(BigDecimal.valueOf(100));
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(sender));
+        when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(recipient));
+
+        assertThrows(InsufficientFundsException.class, () -> accountService.transfer(
+                "1",
+                "2",
+                BigDecimal.valueOf(120))
+        );
+        assertEquals(0, sender.getBalance().compareTo(BigDecimal.valueOf(100)));
+        assertEquals(0, recipient.getBalance().compareTo(BigDecimal.ZERO));
+
+        verify(accountRepository).findByAccountNumber("1");
+        verify(accountRepository).findByAccountNumber("2");
+    }
 }
