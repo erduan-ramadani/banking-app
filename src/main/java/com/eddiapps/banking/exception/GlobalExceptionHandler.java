@@ -57,4 +57,14 @@ public class GlobalExceptionHandler {
                 Instant.now()
         );
     }
+
+    @ExceptionHandler(InvalidTransferException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidTransfer(InvalidTransferException exception) {
+        return new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                exception.getMessage(),
+                Instant.now()
+        );
+    }
 }
