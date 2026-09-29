@@ -5,6 +5,7 @@ import com.eddiapps.banking.entity.AccountEntity;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidAmountException;
+import com.eddiapps.banking.exception.InvalidTransferException;
 import com.eddiapps.banking.repository.AccountRepository;
 
 import org.springframework.stereotype.Service;
@@ -66,5 +67,30 @@ public class AccountService {
                 .findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new AccountNotFoundException("Account not found"));
         return new AccountResponse(accountNumber, account.getBalance());
+    }
+
+    @Transactional
+    public void transfer(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException("Amount must be > 0");
+        }
+
+        if (senderAccountNumber.equals(recipientAccountNumber)) {
+            throw new InvalidTransferException("Sender and recipient must be different");
+        }
+
+        AccountEntity senderAccount = accountRepository
+                .findByAccountNumber(senderAccountNumber)
+                .orElseThrow(() -> new AccountNotFoundException("Sender account not found"));
+        AccountEntity recipientAccount = accountRepository
+                .findByAccountNumber(recipientAccountNumber)
+                .orElseThrow(() -> new AccountNotFoundException("Recipient account not found"));
+
+        if (senderAccount.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException("Insufficient funds");
+        }
+
+        senderAccount.setBalance(senderAccount.getBalance().subtract(amount));
+        recipientAccount.setBalance(recipientAccount.getBalance().add(amount));
     }
 }
