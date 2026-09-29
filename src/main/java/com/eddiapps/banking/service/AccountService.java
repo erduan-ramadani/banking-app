@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Service
 public class AccountService {
@@ -44,12 +45,19 @@ public class AccountService {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
         }
-        AccountEntity account = accountRepository
-                .findByAccountNumber(accountNumber)
+
+        Optional<AccountEntity> existingAccount =
+                accountRepository.findByAccountNumber(accountNumber);
+
+        AccountEntity account = existingAccount
                 .orElseGet(() -> new AccountEntity(accountNumber));
 
         account.setBalance(account.getBalance().add(amount));
-        accountRepository.save(account);
+
+        if (existingAccount.isEmpty()) {
+            accountRepository.save(account);
+        }
+
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
