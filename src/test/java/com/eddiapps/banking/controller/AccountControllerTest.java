@@ -283,7 +283,7 @@ public class AccountControllerTest {
 
     @Test
     void getTransactionHistory_withExistingTransactions_returnsTransactionResponses() throws Exception {
-        TransactionResponse entity1 = new TransactionResponse(
+        TransactionResponse response1 = new TransactionResponse(
                 TransactionType.DEPOSIT,
                 BigDecimal.valueOf(100),
                 Instant.now(),
@@ -291,7 +291,7 @@ public class AccountControllerTest {
                 null
         );
 
-        TransactionResponse entity2 = new TransactionResponse(
+        TransactionResponse response2 = new TransactionResponse(
                 TransactionType.WITHDRAWAL,
                 BigDecimal.valueOf(40),
                 Instant.now(),
@@ -299,7 +299,7 @@ public class AccountControllerTest {
                 null
         );
 
-        TransactionResponse entity3 = new TransactionResponse(
+        TransactionResponse response3 = new TransactionResponse(
                 TransactionType.TRANSFER,
                 BigDecimal.valueOf(120),
                 Instant.now(),
@@ -308,7 +308,7 @@ public class AccountControllerTest {
         );
 
         when(accountService.getTransactionHistory("1"))
-                .thenReturn(List.of(entity1, entity2, entity3));
+                .thenReturn(List.of(response1, response2, response3));
 
         mockMvc.perform(get("/api/accounts/1/history"))
                 .andExpect(status().isOk())

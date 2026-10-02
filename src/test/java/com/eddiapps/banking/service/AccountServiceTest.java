@@ -91,7 +91,7 @@ public class AccountServiceTest {
     }
 
     @Test
-    void deposit_existingAccount_returnsUpdatedBalance() {
+    void deposit_withExistingAccount_returnsUpdatedBalance() {
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
@@ -110,7 +110,7 @@ public class AccountServiceTest {
     }
 
     @Test
-    void deposit_unknownAccount_createsAndSavesAccount() {
+    void deposit_withUnknownAccount_createsAndSavesAccount() {
         when(accountRepository.findByAccountNumber("2"))
                 .thenReturn(Optional.empty());
 
