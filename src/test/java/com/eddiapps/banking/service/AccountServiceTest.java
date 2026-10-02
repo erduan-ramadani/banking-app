@@ -270,6 +270,8 @@ public class AccountServiceTest {
 
     @Test
     void getTransactionHistory_withExistingTransactions_returnsTransactionResponses() {
+        AccountEntity account = new AccountEntity("1");
+
         TransactionEntity entity1 = new TransactionEntity(
                 "1",
                 TransactionType.DEPOSIT,
@@ -294,6 +296,7 @@ public class AccountServiceTest {
                 "2"
         );
 
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
         when(transactionRepository.findByAccountNumberOrderByTimestampDesc("1"))
                 .thenReturn(List.of(entity1, entity2, entity3));
 
@@ -333,5 +336,115 @@ public class AccountServiceTest {
 
         verify(accountRepository).findByAccountNumber("1");
         verify(transactionRepository).findByAccountNumberOrderByTimestampDesc("1");
+    }
+
+    @Test
+    void deposit_withExistingAccount_savesDepositTransaction() {
+        AccountEntity account = new AccountEntity("1");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
+
+        accountService.deposit("1", BigDecimal.valueOf(40));
+
+        ArgumentCaptor<TransactionEntity> captor =
+                ArgumentCaptor.forClass(TransactionEntity.class);
+
+        verify(transactionRepository).save(captor.capture());
+
+        TransactionEntity savedTransaction = captor.getValue();
+
+        assertEquals(TransactionType.DEPOSIT, savedTransaction.getType());
+        assertEquals(0, savedTransaction.getAmount().compareTo(BigDecimal.valueOf(40)));
+        assertNull(savedTransaction.getSenderAccountNumber());
+        assertNull(savedTransaction.getRecipientAccountNumber());
+    }
+
+    @Test
+    void withdraw_withExistingAccount_savesWithdrawTransaction() {
+        AccountEntity account = new AccountEntity("1");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
+
+        account.setBalance(BigDecimal.valueOf(100));
+        accountService.withdraw("1", BigDecimal.valueOf(70));
+
+        ArgumentCaptor<TransactionEntity> captor =
+                ArgumentCaptor.forClass(TransactionEntity.class);
+
+        verify(transactionRepository).save(captor.capture());
+
+        TransactionEntity savedTransaction = captor.getValue();
+
+        assertEquals(TransactionType.WITHDRAWAL, savedTransaction.getType());
+        assertEquals(0, savedTransaction.getAmount().compareTo(BigDecimal.valueOf(70)));
+        assertNull(savedTransaction.getSenderAccountNumber());
+        assertNull(savedTransaction.getRecipientAccountNumber());
+    }
+
+    @Test
+    void transfer_withExistingAccounts_savesTransferTransactions() {
+        AccountEntity senderAccount = new AccountEntity("1");
+        AccountEntity recipientAccount = new AccountEntity("2");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(senderAccount));
+        when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(recipientAccount));
+
+        senderAccount.setBalance(BigDecimal.valueOf(100));
+        accountService.transfer("1", "2", BigDecimal.valueOf(50));
+
+        ArgumentCaptor<TransactionEntity> captor =
+                ArgumentCaptor.forClass(TransactionEntity.class);
+
+        verify(transactionRepository, times(2)).save(captor.capture());
+        List<TransactionEntity> savedTransactions = captor.getAllValues();
+
+        assertEquals(TransactionType.TRANSFER, savedTransactions.getFirst().getType());
+        assertEquals("1", savedTransactions.getFirst().getSenderAccountNumber());
+        assertEquals("2", savedTransactions.getFirst().getRecipientAccountNumber());
+        assertEquals(0, savedTransactions.getFirst().getAmount().compareTo(BigDecimal.valueOf(50)));
+
+        assertEquals(TransactionType.TRANSFER, savedTransactions.get(1).getType());
+        assertEquals("1", savedTransactions.get(1).getSenderAccountNumber());
+        assertEquals("2", savedTransactions.get(1).getRecipientAccountNumber());
+        assertEquals(0, savedTransactions.get(1).getAmount().compareTo(BigDecimal.valueOf(50)));
+    }
+
+    @Test
+    void transfer_withInsufficientFunds_doesNotSaveTransactionHistory() {
+        AccountEntity senderAccount = new AccountEntity("1");
+        AccountEntity recipientAccount = new AccountEntity("2");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(senderAccount));
+        when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(recipientAccount));
+
+        senderAccount.setBalance(BigDecimal.valueOf(10));
+
+        assertThrows(InsufficientFundsException.class,
+                () -> accountService.transfer("1", "2", BigDecimal.valueOf(50)));
+
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void withdraw_withInsufficientFunds_doesNotSaveTransactionHistory() {
+        AccountEntity account = new AccountEntity("1");
+
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
+
+        account.setBalance(BigDecimal.valueOf(10));
+
+        assertThrows(InsufficientFundsException.class,
+                () -> accountService.withdraw("1", BigDecimal.valueOf(50)));
+
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void deposit_withInvalidAmount_doesNotSaveTransactionHistory() {
+        assertThrows(InvalidAmountException.class,
+                () -> accountService.deposit("1", BigDecimal.valueOf(-50)));
+
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
     }
 }
