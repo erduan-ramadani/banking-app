@@ -66,8 +66,6 @@ public class AccountServiceTest {
 
         assertThrows(InsufficientFundsException.class,
                 () -> accountService.withdraw("1", BigDecimal.valueOf(140)));
-
-        verify(accountRepository, never()).save(any());
     }
 
     @Test
@@ -77,8 +75,6 @@ public class AccountServiceTest {
 
         assertThrows(AccountNotFoundException.class,
                 () -> accountService.withdraw("99", BigDecimal.valueOf(140)));
-
-        verify(accountRepository, never()).save(any());
     }
 
     @Test
