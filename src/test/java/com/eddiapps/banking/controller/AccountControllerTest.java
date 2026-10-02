@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
+import com.eddiapps.banking.exception.InvalidTransferException;
 import com.eddiapps.banking.service.AccountService;
 
 import org.junit.jupiter.api.Test;
@@ -123,5 +124,156 @@ public class AccountControllerTest {
                 .andExpect(jsonPath("$.message").value("Amount must be greater than 0"));
 
         verify(accountService, never()).withdraw(anyString(), any(BigDecimal.class));
+    }
+
+    @Test
+    void transfer_withValidAccounts_returnsUpdatedBalance() throws Exception {
+        AccountResponse response = new AccountResponse(
+                "1", BigDecimal.valueOf(60)
+        );
+
+        when(accountService.transfer(
+                "1",
+                "2",
+                BigDecimal.valueOf(40))
+        ).thenReturn(response);
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "senderAccountNumber": "1",
+                                "recipientAccountNumber": "2",
+                                "amount": 40
+                                }
+                                """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber").value("1"))
+                .andExpect(jsonPath("$.balance").value(60));
+
+        verify(accountService).transfer("1", "2", BigDecimal.valueOf(40));
+    }
+
+    @Test
+    void transfer_withSameAccountNumbers_returnsBadRequest() throws Exception {
+        when(accountService.transfer(
+                "1",
+                "1",
+                BigDecimal.valueOf(40))
+        ).thenThrow(new InvalidTransferException(
+                "Sender and recipient must be different"
+        ));
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "1",
+                                        "recipientAccountNumber": "1",
+                                        "amount": 40
+                                        }
+                                """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Sender and recipient must be different"));
+
+        verify(accountService).transfer("1", "1", BigDecimal.valueOf(40));
+    }
+
+    @Test
+    void transfer_withInvalidAmount_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "1",
+                                        "recipientAccountNumber": "2",
+                                        "amount": 0
+                                        }
+                                """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Amount must be greater than 0"));
+
+        verify(accountService, never()).transfer(
+                any(String.class),
+                any(String.class),
+                any(BigDecimal.class)
+        );
+    }
+
+    @Test
+    void transfer_withUnknownSender_returnsNotFound() throws Exception {
+        when(accountService.transfer("99", "2", BigDecimal.valueOf(100))
+        ).thenThrow(new AccountNotFoundException("Sender account not found"));
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "99",
+                                        "recipientAccountNumber": "2",
+                                        "amount": 100
+                                        }
+                                """)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Sender account not found"));
+
+        verify(accountService).transfer("99", "2", BigDecimal.valueOf(100));
+    }
+
+    @Test
+    void transfer_withUnknownRecipient_returnsNotFound() throws Exception {
+        when(accountService.transfer(
+                "1",
+                "99",
+                BigDecimal.valueOf(100)))
+                .thenThrow(new AccountNotFoundException("Recipient account not found"));
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "1",
+                                        "recipientAccountNumber": "99",
+                                        "amount": 100
+                                        }
+                                """)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Recipient account not found"));
+
+        verify(accountService).transfer("1", "99", BigDecimal.valueOf(100));
+    }
+
+    @Test
+    void transfer_withInsufficientFunds_returnsBadRequest() throws Exception {
+        when(accountService.transfer(
+                "1",
+                "2",
+                BigDecimal.valueOf(120)))
+                .thenThrow(new InsufficientFundsException("Insufficient funds"));
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "1",
+                                        "recipientAccountNumber": "2",
+                                        "amount": 120
+                                        }
+                                """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Insufficient funds"));
+
+        verify(accountService).transfer("1", "2", BigDecimal.valueOf(120));
     }
 }
