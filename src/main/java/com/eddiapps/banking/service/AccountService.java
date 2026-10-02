@@ -142,6 +142,9 @@ public class AccountService {
     }
 
     public List<TransactionResponse> getTransactionHistory(String accountNumber) {
+        accountRepository.findByAccountNumber(accountNumber).orElseThrow(
+                () -> new AccountNotFoundException("Account not found"));
+
         List<TransactionEntity> transactions = transactionRepository.findByAccountNumberOrderByTimestampDesc(accountNumber);
         return transactions.stream().map(entity ->
                 new TransactionResponse(
