@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.eddiapps.banking.dto.AccountResponse;
+import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidTransferException;
+import com.eddiapps.banking.model.TransactionType;
 import com.eddiapps.banking.service.AccountService;
 
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 
 @WebMvcTest(AccountController.class)
 public class AccountControllerTest {
@@ -275,5 +279,59 @@ public class AccountControllerTest {
                 .andExpect(jsonPath("$.message").value("Insufficient funds"));
 
         verify(accountService).transfer("1", "2", BigDecimal.valueOf(120));
+    }
+
+    @Test
+    void getTransactionHistory_withExistingTransactions_returnsTransactionResponses() throws Exception {
+        TransactionResponse entity1 = new TransactionResponse(
+                TransactionType.DEPOSIT,
+                BigDecimal.valueOf(100),
+                Instant.now(),
+                null,
+                null
+        );
+
+        TransactionResponse entity2 = new TransactionResponse(
+                TransactionType.WITHDRAWAL,
+                BigDecimal.valueOf(40),
+                Instant.now(),
+                null,
+                null
+        );
+
+        TransactionResponse entity3 = new TransactionResponse(
+                TransactionType.TRANSFER,
+                BigDecimal.valueOf(120),
+                Instant.now(),
+                "1",
+                "2"
+        );
+
+        when(accountService.getTransactionHistory("1"))
+                .thenReturn(List.of(entity1, entity2, entity3));
+
+        mockMvc.perform(get("/api/accounts/1/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("DEPOSIT"))
+                .andExpect(jsonPath("$[1].type").value("WITHDRAWAL"))
+                .andExpect(jsonPath("$[2].type").value("TRANSFER"))
+                .andExpect(jsonPath("$[1].amount").value(40))
+                .andExpect(jsonPath("$[2].recipientAccountNumber").value("2"))
+        ;
+
+        verify(accountService).getTransactionHistory("1");
+    }
+
+    @Test
+    void getTransactionHistory_withUnknownAccount_returnsNotFound() throws Exception {
+        when(accountService.getTransactionHistory("99"))
+                .thenThrow(new AccountNotFoundException("Account not found"));
+
+        mockMvc.perform(get("/api/accounts/99/history"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Account not found"));
+
+        verify(accountService).getTransactionHistory("99");
     }
 }

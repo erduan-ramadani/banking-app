@@ -1,16 +1,19 @@
 package com.eddiapps.banking.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.eddiapps.banking.dto.AccountResponse;
+import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.entity.AccountEntity;
+import com.eddiapps.banking.entity.TransactionEntity;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidAmountException;
 import com.eddiapps.banking.exception.InvalidTransferException;
+import com.eddiapps.banking.model.TransactionType;
 import com.eddiapps.banking.repository.AccountRepository;
+import com.eddiapps.banking.repository.TransactionRepository;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +31,8 @@ public class AccountServiceTest {
 
     @Mock
     private AccountRepository accountRepository;
+    @Mock
+    private TransactionRepository transactionRepository;
 
     @InjectMocks
     private AccountService accountService;
@@ -260,5 +266,72 @@ public class AccountServiceTest {
 
         verify(accountRepository).findByAccountNumber("1");
         verify(accountRepository).findByAccountNumber("2");
+    }
+
+    @Test
+    void getTransactionHistory_withExistingTransactions_returnsTransactionResponses() {
+        TransactionEntity entity1 = new TransactionEntity(
+                "1",
+                TransactionType.DEPOSIT,
+                BigDecimal.valueOf(100),
+                null,
+                null
+        );
+
+        TransactionEntity entity2 = new TransactionEntity(
+                "1",
+                TransactionType.WITHDRAWAL,
+                BigDecimal.valueOf(40),
+                null,
+                null
+        );
+
+        TransactionEntity entity3 = new TransactionEntity(
+                "1",
+                TransactionType.TRANSFER,
+                BigDecimal.valueOf(60),
+                "1",
+                "2"
+        );
+
+        when(transactionRepository.findByAccountNumberOrderByTimestampDesc("1"))
+                .thenReturn(List.of(entity1, entity2, entity3));
+
+        List<TransactionResponse> transactions = accountService.getTransactionHistory("1");
+
+        assertEquals(0, transactions.getFirst().amount().compareTo(BigDecimal.valueOf(100)));
+        assertEquals(TransactionType.WITHDRAWAL, transactions.get(1).type());
+        assertEquals("2", transactions.getLast().recipientAccountNumber());
+
+        verify(transactionRepository).findByAccountNumberOrderByTimestampDesc("1");
+    }
+
+    @Test
+    void getTransactionHistory_withUnknownAccount_throwsAccountNotFoundException() {
+        when(accountRepository.findByAccountNumber("99"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(AccountNotFoundException.class,
+                () -> accountService.getTransactionHistory("99"));
+
+        verify(accountRepository).findByAccountNumber("99");
+        verify(transactionRepository, never()).findByAccountNumberOrderByTimestampDesc(anyString());
+    }
+
+    @Test
+    void getTransactionHistory_withNoTransactions_returnsEmptyList() {
+        AccountEntity account = new AccountEntity("1");
+
+        when(accountRepository.findByAccountNumber("1"))
+                .thenReturn(Optional.of(account));
+        when(transactionRepository.findByAccountNumberOrderByTimestampDesc("1"))
+                .thenReturn(List.of());
+
+        List<TransactionResponse> transactions = accountService.getTransactionHistory("1");
+
+        assertTrue(transactions.isEmpty());
+
+        verify(accountRepository).findByAccountNumber("1");
+        verify(transactionRepository).findByAccountNumberOrderByTimestampDesc("1");
     }
 }
