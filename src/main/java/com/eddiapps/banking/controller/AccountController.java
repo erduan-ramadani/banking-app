@@ -2,10 +2,13 @@ package com.eddiapps.banking.controller;
 
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.dto.AmountRequest;
+import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.dto.TransferRequest;
 import com.eddiapps.banking.service.AccountService;
 
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 import jakarta.validation.Valid;
 
@@ -50,5 +53,10 @@ public class AccountController {
                 request.recipientAccountNumber(),
                 request.amount()
         );
+    }
+
+    @GetMapping("/{accountNumber}/history")
+    List<TransactionResponse> getHistory(@PathVariable String accountNumber) {
+        return accountService.getTransactionHistory(accountNumber);
     }
 }

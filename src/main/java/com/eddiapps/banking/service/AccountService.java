@@ -1,26 +1,36 @@
 package com.eddiapps.banking.service;
 
 import com.eddiapps.banking.dto.AccountResponse;
+import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.entity.AccountEntity;
+import com.eddiapps.banking.entity.TransactionEntity;
 import com.eddiapps.banking.exception.AccountNotFoundException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidAmountException;
 import com.eddiapps.banking.exception.InvalidTransferException;
+import com.eddiapps.banking.model.TransactionType;
 import com.eddiapps.banking.repository.AccountRepository;
+import com.eddiapps.banking.repository.TransactionRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 @Service
 public class AccountService {
 
     private final AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
 
-    public AccountService(AccountRepository accountRepository) {
+    public AccountService(
+            AccountRepository accountRepository,
+            TransactionRepository transactionRepository
+    ) {
         this.accountRepository = accountRepository;
+        this.transactionRepository = transactionRepository;
     }
 
     @Transactional
@@ -38,6 +48,15 @@ public class AccountService {
         }
 
         account.setBalance(account.getBalance().subtract(amount));
+
+        transactionRepository.save(new TransactionEntity(
+                accountNumber,
+                TransactionType.WITHDRAWAL,
+                amount,
+                null,
+                null)
+        );
+
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
@@ -58,6 +77,14 @@ public class AccountService {
         if (existingAccount.isEmpty()) {
             accountRepository.save(account);
         }
+
+        transactionRepository.save(new TransactionEntity(
+                accountNumber,
+                TransactionType.DEPOSIT,
+                amount,
+                null,
+                null)
+        );
 
         return new AccountResponse(accountNumber, account.getBalance());
     }
@@ -92,6 +119,38 @@ public class AccountService {
 
         senderAccount.setBalance(senderAccount.getBalance().subtract(amount));
         recipientAccount.setBalance(recipientAccount.getBalance().add(amount));
+
+        transactionRepository.save(new TransactionEntity(
+                        senderAccountNumber,
+                        TransactionType.TRANSFER,
+                        amount,
+                        senderAccountNumber,
+                        recipientAccountNumber
+                )
+        );
+
+        transactionRepository.save(new TransactionEntity(
+                        recipientAccountNumber,
+                        TransactionType.TRANSFER,
+                        amount,
+                        senderAccountNumber,
+                        recipientAccountNumber
+                )
+        );
+
         return new AccountResponse(senderAccountNumber, senderAccount.getBalance());
+    }
+
+    public List<TransactionResponse> getTransactionHistory(String accountNumber) {
+        List<TransactionEntity> transactions = transactionRepository.findByAccountNumberOrderByTimestampDesc(accountNumber);
+        return transactions.stream().map(entity ->
+                new TransactionResponse(
+                        entity.getType(),
+                        entity.getAmount(),
+                        entity.getTimestamp(),
+                        entity.getSenderAccountNumber(),
+                        entity.getRecipientAccountNumber()
+                )
+        ).toList();
     }
 }
