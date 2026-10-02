@@ -35,7 +35,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse withdraw(String accountNumber, BigDecimal amount) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
@@ -62,7 +62,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse deposit(String accountNumber, BigDecimal amount) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
@@ -89,6 +89,7 @@ public class AccountService {
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
+    @Transactional(readOnly = true)
     public AccountResponse getBalance(String accountNumber) {
         AccountEntity account = accountRepository
                 .findByAccountNumber(accountNumber)
@@ -98,7 +99,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse transfer(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
@@ -141,6 +142,7 @@ public class AccountService {
         return new AccountResponse(senderAccountNumber, senderAccount.getBalance());
     }
 
+    @Transactional(readOnly = true)
     public List<TransactionResponse> getTransactionHistory(String accountNumber) {
         accountRepository.findByAccountNumber(accountNumber).orElseThrow(
                 () -> new AccountNotFoundException("Account not found"));
