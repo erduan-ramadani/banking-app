@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleInvalidAmount(MethodArgumentNotValidException exception) {
+    public ErrorResponse handleValidationError(MethodArgumentNotValidException exception) {
         var fieldError = exception.getBindingResult().getFieldError();
         String message = fieldError != null
                 ? fieldError.getDefaultMessage()
