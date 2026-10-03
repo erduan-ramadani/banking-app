@@ -108,8 +108,8 @@ public class AccountControllerTest {
                                 }
                                 """)
                 )
-                .andExpect(status().is(HttpStatus.BAD_REQUEST.value()))
-                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(status().is(HttpStatus.UNPROCESSABLE_CONTENT.value()))
+                .andExpect(jsonPath("$.status").value(422))
                 .andExpect(jsonPath("$.message").value("Insufficient funds"));
     }
 
@@ -274,8 +274,8 @@ public class AccountControllerTest {
                                         }
                                 """)
                 )
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(status().is(HttpStatus.UNPROCESSABLE_CONTENT.value()))
+                .andExpect(jsonPath("$.status").value(422))
                 .andExpect(jsonPath("$.message").value("Insufficient funds"));
 
         verify(accountService).transfer("1", "2", BigDecimal.valueOf(120));

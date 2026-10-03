@@ -24,10 +24,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(InsufficientFundsException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
     public ErrorResponse handleInsufficientFunds(InsufficientFundsException exception) {
         return new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.UNPROCESSABLE_CONTENT.value(),
                 exception.getMessage(),
                 Instant.now()
         );
