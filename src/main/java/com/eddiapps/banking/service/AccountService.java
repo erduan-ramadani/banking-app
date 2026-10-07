@@ -3,19 +3,19 @@ package com.eddiapps.banking.service;
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.entity.AccountEntity;
+import com.eddiapps.banking.entity.IdempotencyRecord;
 import com.eddiapps.banking.entity.TransactionEntity;
-import com.eddiapps.banking.exception.AccountNotFoundException;
-import com.eddiapps.banking.exception.InsufficientFundsException;
-import com.eddiapps.banking.exception.InvalidAmountException;
-import com.eddiapps.banking.exception.InvalidTransferException;
+import com.eddiapps.banking.exception.*;
 import com.eddiapps.banking.model.TransactionType;
 import com.eddiapps.banking.repository.AccountRepository;
+import com.eddiapps.banking.repository.IdempotencyRecordRepository;
 import com.eddiapps.banking.repository.TransactionRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,13 +24,16 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final IdempotencyRecordRepository idempotencyRecordRepository;
 
     public AccountService(
             AccountRepository accountRepository,
-            TransactionRepository transactionRepository
+            TransactionRepository transactionRepository,
+            IdempotencyRecordRepository idempotencyRecordRepository
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
+        this.idempotencyRecordRepository = idempotencyRecordRepository;
     }
 
     @Transactional
@@ -61,9 +64,22 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse deposit(String accountNumber, BigDecimal amount) {
+    public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
+        }
+
+        String currentFingerprint = "DEPOSIT" + " | " + accountNumber + " | " + amount;
+        Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingRecord.isPresent()) {
+            if (!existingRecord.get().getRequestFingerprint().equals(currentFingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key already used for a different request");
+            }
+
+            return new AccountResponse(
+                    existingRecord.get().getAccountNumber(),
+                    existingRecord.get().getBalance()
+            );
         }
 
         Optional<AccountEntity> existingAccount =
@@ -86,6 +102,13 @@ public class AccountService {
                 null)
         );
 
+        idempotencyRecordRepository.save(new IdempotencyRecord(
+                idempotencyKey,
+                currentFingerprint,
+                accountNumber,
+                account.getBalance(),
+                Instant.now()
+        ));
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
