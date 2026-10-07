@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.dto.TransactionResponse;
 import com.eddiapps.banking.exception.AccountNotFoundException;
+import com.eddiapps.banking.exception.IdempotencyConflictException;
 import com.eddiapps.banking.exception.InsufficientFundsException;
 import com.eddiapps.banking.exception.InvalidTransferException;
 import com.eddiapps.banking.model.TransactionType;
@@ -37,10 +38,12 @@ public class AccountControllerTest {
 
     @Test
     void deposit_returnsAccountResponse() throws Exception {
-        when(accountService.deposit("1", BigDecimal.valueOf(100)))
+        String idempotencyKey = "deposit-key-123";
+        when(accountService.deposit(idempotencyKey, "1", BigDecimal.valueOf(100)))
                 .thenReturn(new AccountResponse("1", BigDecimal.valueOf(200)));
 
         mockMvc.perform(post("/api/accounts/1/deposit")
+                        .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -51,6 +54,30 @@ public class AccountControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountNumber").value("1"))
                 .andExpect(jsonPath("$.balance").value(200));
+
+        verify(accountService).deposit(
+                idempotencyKey, "1", BigDecimal.valueOf(100)
+        );
+    }
+
+    @Test
+    void deposit_withReusedIdempotencyKeyForDifferentRequest_returnsConflict() throws Exception {
+        String idempotencyKey = "deposit-key-123";
+        when(accountService.deposit(idempotencyKey, "1", BigDecimal.valueOf(200)))
+                .thenThrow(new IdempotencyConflictException("Idempotency key already used for a different request"));
+
+        mockMvc.perform(post("/api/accounts/1/deposit")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "amount": 200
+                                }
+                                """)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Idempotency key already used for a different request"));
     }
 
     @Test

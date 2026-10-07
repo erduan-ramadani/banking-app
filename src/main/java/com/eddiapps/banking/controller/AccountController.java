@@ -24,9 +24,10 @@ public class AccountController {
     @PostMapping("/{accountNumber}/deposit")
     AccountResponse deposit(
             @PathVariable String accountNumber,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody AmountRequest request
     ) {
-        return accountService.deposit(accountNumber, request.amount());
+        return accountService.deposit(idempotencyKey, accountNumber, request.amount());
     }
 
     @PostMapping("/{accountNumber}/withdraw")
