@@ -67,4 +67,14 @@ public class GlobalExceptionHandler {
                 Instant.now()
         );
     }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleIdempotencyConflict(IdempotencyConflictException exception) {
+        return new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                exception.getMessage(),
+                Instant.now()
+        );
+    }
 }
