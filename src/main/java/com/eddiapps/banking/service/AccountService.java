@@ -37,9 +37,21 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse withdraw(String accountNumber, BigDecimal amount) {
+    public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
+        }
+
+        String requestFingerprint = "WITHDRAWAL" + " | " + accountNumber + " | " + amount;
+
+        Optional<IdempotencyRecord> idempotencyRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+        if (idempotencyRecord.isPresent()) {
+            IdempotencyRecord existingRecord = idempotencyRecord.get();
+            if (!existingRecord.getRequestFingerprint().equals(requestFingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key already used for a different request");
+            }
+
+            return new AccountResponse(existingRecord.getAccountNumber(), existingRecord.getBalance());
         }
 
         AccountEntity account = accountRepository
@@ -58,6 +70,16 @@ public class AccountService {
                 amount,
                 null,
                 null)
+        );
+
+        idempotencyRecordRepository.save(
+                new IdempotencyRecord(
+                        idempotencyKey,
+                        requestFingerprint,
+                        accountNumber,
+                        account.getBalance(),
+                        Instant.now()
+                )
         );
 
         return new AccountResponse(accountNumber, account.getBalance());

@@ -41,13 +41,14 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withSufficientFunds_returnsUpdatedBalance() {
+        String idempotencyKey = "deposit-key-123";
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.of(accountEntity));
 
-        AccountResponse response = accountService.withdraw("1", BigDecimal.valueOf(40));
+        AccountResponse response = accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(40));
 
         assertEquals(0, response.balance().compareTo(BigDecimal.valueOf(60)));
         assertEquals(
@@ -60,6 +61,7 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withInsufficientFunds_throwsInsufficientFundsException() {
+        String idempotencyKey = "deposit-key-123";
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
@@ -67,22 +69,26 @@ public class AccountServiceTest {
                 .thenReturn(Optional.of(accountEntity));
 
         assertThrows(InsufficientFundsException.class,
-                () -> accountService.withdraw("1", BigDecimal.valueOf(140)));
+                () -> accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(140)));
     }
 
     @Test
     void withdraw_withUnknownAccount_throwsAccountNotFoundException() {
+        String idempotencyKey = "deposit-key-123";
+
         when(accountRepository.findByAccountNumber("99"))
                 .thenReturn(Optional.empty());
 
         assertThrows(AccountNotFoundException.class,
-                () -> accountService.withdraw("99", BigDecimal.valueOf(140)));
+                () -> accountService.withdraw(idempotencyKey, "99", BigDecimal.valueOf(140)));
     }
 
     @Test
     void withdraw_withInvalidAmount_throwsInvalidAmountException() {
+        String idempotencyKey = "deposit-key-123";
+
         assertThrows(InvalidAmountException.class,
-                () -> accountService.withdraw("1", BigDecimal.valueOf(0)));
+                () -> accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(0)));
 
         verify(accountRepository, never()).findByAccountNumber("1");
         verify(accountRepository, never()).save(any());
@@ -373,12 +379,13 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withExistingAccount_savesWithdrawTransaction() {
+        String idempotencyKey = "deposit-key-123";
         AccountEntity account = new AccountEntity("1");
 
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
 
         account.setBalance(BigDecimal.valueOf(100));
-        accountService.withdraw("1", BigDecimal.valueOf(70));
+        accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(70));
 
         ArgumentCaptor<TransactionEntity> captor =
                 ArgumentCaptor.forClass(TransactionEntity.class);
@@ -440,15 +447,89 @@ public class AccountServiceTest {
     @Test
     void withdraw_withInsufficientFunds_doesNotSaveTransactionHistory() {
         AccountEntity account = new AccountEntity("1");
+        String idempotencyKey = "deposit-key-123";
 
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
 
         account.setBalance(BigDecimal.valueOf(10));
 
         assertThrows(InsufficientFundsException.class,
-                () -> accountService.withdraw("1", BigDecimal.valueOf(50)));
+                () -> accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(50)));
 
         verify(transactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void withdraw_withExistingIdempotencyKey_returnsStoredResponse() {
+        String idempotencyKey = "withdraw-key-123";
+        String requestFingerprint = "WITHDRAWAL" + " | " + "1" + " | " + BigDecimal.valueOf(40);
+        IdempotencyRecord record = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(60),
+                Instant.now()
+        );
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(record));
+
+        AccountResponse response = accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(40));
+
+        assertEquals("1", response.accountNumber());
+        assertEquals(0, BigDecimal.valueOf(60).compareTo(response.balance()));
+
+        verify(accountRepository, never()).findByAccountNumber("1");
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void withdraw_withReusedIdempotencyKeyForDifferentRequest_throwsConflict() {
+        String idempotencyKey = "withdraw-key-123";
+        String requestFingerprint = "WITHDRAWAL" + " | " + "1" + " | " + BigDecimal.valueOf(40);
+        IdempotencyRecord record = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(60),
+                Instant.now()
+        );
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(record));
+
+        assertThrows(IdempotencyConflictException.class,
+                () -> accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(60)));
+
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void withdraw_withNewIdempotencyKey_savesIdempotencyRecord() {
+        AccountEntity account = new AccountEntity("1");
+        account.setBalance(BigDecimal.valueOf(100));
+        String idempotencyKey = "withdraw-key-123";
+
+        when(accountRepository.findByAccountNumber("1"))
+                .thenReturn(Optional.of(account));
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        AccountResponse response = accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(40));
+        ArgumentCaptor<IdempotencyRecord> captor = ArgumentCaptor.forClass(IdempotencyRecord.class);
+
+        verify(idempotencyRecordRepository).save(captor.capture());
+        IdempotencyRecord savedRecord = captor.getValue();
+
+        assertEquals(response.accountNumber(), savedRecord.getAccountNumber());
+        assertEquals(0, BigDecimal.valueOf(60).compareTo(savedRecord.getBalance()));
+        assertEquals(idempotencyKey, savedRecord.getIdempotencyKey());
+        assertEquals(
+                "WITHDRAWAL | 1 | 40",
+                savedRecord.getRequestFingerprint()
+        );
+        assertNotNull(savedRecord.getCreatedAt());
     }
 
     @Test
