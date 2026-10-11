@@ -41,10 +41,12 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withSufficientFunds_returnsUpdatedBalance() {
-        String idempotencyKey = "deposit-key-123";
+        String idempotencyKey = "withdraw-key-123";
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.of(accountEntity));
 
@@ -61,7 +63,7 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withInsufficientFunds_throwsInsufficientFundsException() {
-        String idempotencyKey = "deposit-key-123";
+        String idempotencyKey = "withdraw-key-123";
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
@@ -74,7 +76,7 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withUnknownAccount_throwsAccountNotFoundException() {
-        String idempotencyKey = "deposit-key-123";
+        String idempotencyKey = "withdraw-key-123";
 
         when(accountRepository.findByAccountNumber("99"))
                 .thenReturn(Optional.empty());
@@ -85,7 +87,7 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withInvalidAmount_throwsInvalidAmountException() {
-        String idempotencyKey = "deposit-key-123";
+        String idempotencyKey = "withdraw-key-123";
 
         assertThrows(InvalidAmountException.class,
                 () -> accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(0)));
@@ -96,14 +98,17 @@ public class AccountServiceTest {
 
     @Test
     void deposit_withExistingAccount_returnsUpdatedBalance() {
+        String idempotencyKey = "deposit-key-123";
         AccountEntity accountEntity = new AccountEntity("1");
         accountEntity.setBalance(BigDecimal.valueOf(100));
 
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.of(accountEntity));
 
         AccountResponse response = accountService.deposit(
-                "deposit-key-123",
+                idempotencyKey,
                 "1",
                 BigDecimal.valueOf(40)
         );
@@ -119,11 +124,13 @@ public class AccountServiceTest {
 
     @Test
     void deposit_withUnknownAccount_createsAndSavesAccount() {
+        String idempotencyKey = "deposit-key-123";
+
         when(accountRepository.findByAccountNumber("2"))
                 .thenReturn(Optional.empty());
 
         AccountResponse response = accountService.deposit(
-                "deposit-key-123",
+                idempotencyKey,
                 "2",
                 BigDecimal.valueOf(100)
         );
@@ -147,9 +154,11 @@ public class AccountServiceTest {
 
     @Test
     void deposit_withInvalidAmount_throwsInvalidAmountException() {
+        String idempotencyKey = "deposit-key-123";
+
         assertThrows(InvalidAmountException.class,
                 () -> accountService.deposit(
-                        "deposit-key-123",
+                        idempotencyKey,
                         "1",
                         BigDecimal.ZERO)
         );
@@ -184,18 +193,23 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withExistingAccounts_returnsBalance() {
+        String idempotencyKey = "transfer-key-123";
+
         AccountEntity sender = new AccountEntity("1");
         sender.setBalance(BigDecimal.valueOf(100));
 
         AccountEntity recipient = new AccountEntity("2");
         recipient.setBalance(BigDecimal.valueOf(50));
 
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.of(sender));
         when(accountRepository.findByAccountNumber("2"))
                 .thenReturn(Optional.of(recipient));
 
         AccountResponse response = accountService.transfer(
+                idempotencyKey,
                 sender.getAccountNumber(),
                 recipient.getAccountNumber(),
                 BigDecimal.valueOf(40)
@@ -211,7 +225,10 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withInvalidAmount_throwsInvalidAmountException() {
+        String idempotencyKey = "transfer-key-123";
+
         assertThrows(InvalidAmountException.class, () -> accountService.transfer(
+                        idempotencyKey,
                         "1",
                         "2",
                         BigDecimal.ZERO
@@ -224,7 +241,10 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withSameAccountNumbers_throwsInvalidTransferException() {
+        String idempotencyKey = "transfer-key-123";
+
         assertThrows(InvalidTransferException.class, () -> accountService.transfer(
+                        idempotencyKey,
                         "1",
                         "1",
                         BigDecimal.valueOf(100)
@@ -236,9 +256,12 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withUnknownSender_throwsAccountNotFoundException() {
+        String idempotencyKey = "transfer-key-123";
+
         when(accountRepository.findByAccountNumber("99")).thenReturn(Optional.empty());
 
         assertThrows(AccountNotFoundException.class, () -> accountService.transfer(
+                idempotencyKey,
                 "99",
                 "1",
                 BigDecimal.valueOf(100))
@@ -249,12 +272,14 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withUnknownRecipient_throwsAccountNotFoundException() {
+        String idempotencyKey = "transfer-key-123";
         AccountEntity sender = new AccountEntity("1");
 
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(sender));
         when(accountRepository.findByAccountNumber("99")).thenReturn(Optional.empty());
 
         assertThrows(AccountNotFoundException.class, () -> accountService.transfer(
+                idempotencyKey,
                 "1",
                 "99",
                 BigDecimal.valueOf(100))
@@ -263,6 +288,7 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withInsufficientFunds_throwsInsufficientFundsException() {
+        String idempotencyKey = "transfer-key-123";
         AccountEntity sender = new AccountEntity("1");
         AccountEntity recipient = new AccountEntity("2");
 
@@ -272,6 +298,7 @@ public class AccountServiceTest {
         when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(recipient));
 
         assertThrows(InsufficientFundsException.class, () -> accountService.transfer(
+                idempotencyKey,
                 "1",
                 "2",
                 BigDecimal.valueOf(120))
@@ -355,11 +382,14 @@ public class AccountServiceTest {
 
     @Test
     void deposit_withExistingAccount_savesDepositTransaction() {
+        String idempotencyKey = "deposit-key-123";
         AccountEntity account = new AccountEntity("1");
 
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
 
-        accountService.deposit("deposit-key-123",
+        accountService.deposit(idempotencyKey,
                 "1",
                 BigDecimal.valueOf(40)
         );
@@ -379,7 +409,7 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withExistingAccount_savesWithdrawTransaction() {
-        String idempotencyKey = "deposit-key-123";
+        String idempotencyKey = "withdraw-key-123";
         AccountEntity account = new AccountEntity("1");
 
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
@@ -402,14 +432,17 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withExistingAccounts_savesTransferTransactions() {
+        String idempotencyKey = "transfer-key-123";
         AccountEntity senderAccount = new AccountEntity("1");
         AccountEntity recipientAccount = new AccountEntity("2");
 
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(senderAccount));
         when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(recipientAccount));
 
         senderAccount.setBalance(BigDecimal.valueOf(100));
-        accountService.transfer("1", "2", BigDecimal.valueOf(50));
+        accountService.transfer(idempotencyKey, "1", "2", BigDecimal.valueOf(50));
 
         ArgumentCaptor<TransactionEntity> captor =
                 ArgumentCaptor.forClass(TransactionEntity.class);
@@ -430,6 +463,7 @@ public class AccountServiceTest {
 
     @Test
     void transfer_withInsufficientFunds_doesNotSaveTransactionHistory() {
+        String idempotencyKey = "transfer-key-123";
         AccountEntity senderAccount = new AccountEntity("1");
         AccountEntity recipientAccount = new AccountEntity("2");
 
@@ -439,15 +473,20 @@ public class AccountServiceTest {
         senderAccount.setBalance(BigDecimal.valueOf(10));
 
         assertThrows(InsufficientFundsException.class,
-                () -> accountService.transfer("1", "2", BigDecimal.valueOf(50)));
+                () -> accountService.transfer(
+                        idempotencyKey,
+                        "1",
+                        "2",
+                        BigDecimal.valueOf(50))
+        );
 
         verify(transactionRepository, never()).save(any(TransactionEntity.class));
     }
 
     @Test
     void withdraw_withInsufficientFunds_doesNotSaveTransactionHistory() {
+        String idempotencyKey = "withdraw-key-123";
         AccountEntity account = new AccountEntity("1");
-        String idempotencyKey = "deposit-key-123";
 
         when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(account));
 
@@ -507,9 +546,9 @@ public class AccountServiceTest {
 
     @Test
     void withdraw_withNewIdempotencyKey_savesIdempotencyRecord() {
+        String idempotencyKey = "withdraw-key-123";
         AccountEntity account = new AccountEntity("1");
         account.setBalance(BigDecimal.valueOf(100));
-        String idempotencyKey = "withdraw-key-123";
 
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.of(account));
@@ -534,9 +573,11 @@ public class AccountServiceTest {
 
     @Test
     void deposit_withInvalidAmount_doesNotSaveTransactionHistory() {
+        String idempotencyKey = "deposit-key-123";
+
         assertThrows(InvalidAmountException.class,
                 () -> accountService.deposit(
-                        "deposit-key-123",
+                        idempotencyKey,
                         "1",
                         BigDecimal.valueOf(-50)));
 
