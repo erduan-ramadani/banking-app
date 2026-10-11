@@ -643,6 +643,7 @@ public class AccountServiceTest {
     @Test
     void deposit_withNewIdempotencyKey_savesIdempotencyRecord() {
         String idempotencyKey = "deposit-key-123";
+
         when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
         when(accountRepository.findByAccountNumber("1"))
                 .thenReturn(Optional.empty());
@@ -660,6 +661,112 @@ public class AccountServiceTest {
         assertNotNull(savedRecord.getCreatedAt());
 
         String expectedFingerprint = "DEPOSIT" + " | " + response.accountNumber() + " | " + BigDecimal.valueOf(100);
+        assertEquals(expectedFingerprint, savedRecord.getRequestFingerprint());
+    }
+
+    @Test
+    void transfer_withExistingIdempotencyKey_returnsStoredResponse() {
+        String idempotencyKey = "transfer-key-123";
+        BigDecimal amount = BigDecimal.valueOf(40);
+        String requestFingerprint = "TRANSFER" + " | "
+                + "1" + " | "
+                + "2" + " | "
+                + amount;
+        IdempotencyRecord existingRecord = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(60),
+                Instant.now()
+        );
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(existingRecord));
+
+        AccountResponse response = accountService.transfer(
+                idempotencyKey,
+                "1",
+                "2",
+                amount
+        );
+
+        assertEquals("1", response.accountNumber());
+        assertEquals(0, existingRecord.getBalance().compareTo(response.balance()));
+
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+        verify(idempotencyRecordRepository, never()).save(any(IdempotencyRecord.class));
+    }
+
+    @Test
+    void transfer_withReusedIdempotencyKeyForDifferentRequest_throwsConflict() {
+        String idempotencyKey = "transfer-key-123";
+        String requestFingerprint = "TRANSFER" + " | "
+                + "1" + " | "
+                + "2" + " | "
+                + BigDecimal.valueOf(40);
+        IdempotencyRecord existingRecord = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(60),
+                Instant.now()
+        );
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(existingRecord));
+
+        assertThrows(IdempotencyConflictException.class,
+                () -> accountService.transfer(
+                        idempotencyKey,
+                        "1",
+                        "2",
+                        BigDecimal.valueOf(50)
+                )
+        );
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+        verify(idempotencyRecordRepository, never()).save(any(IdempotencyRecord.class));
+    }
+
+    @Test
+    void transfer_withNewIdempotencyKey_savesIdempotencyRecord() {
+        String idempotencyKey = "transfer-key-123";
+        AccountEntity sender = new AccountEntity("1");
+        sender.setBalance(BigDecimal.valueOf(100));
+        AccountEntity receiver = new AccountEntity("2");
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(accountRepository.findByAccountNumber("1")).thenReturn(Optional.of(sender));
+        when(accountRepository.findByAccountNumber("2")).thenReturn(Optional.of(receiver));
+
+        AccountResponse response = accountService.transfer(
+                idempotencyKey,
+                "1",
+                "2",
+                BigDecimal.valueOf(40)
+        );
+
+        assertEquals("1", response.accountNumber());
+        assertEquals(0, response.balance().compareTo(BigDecimal.valueOf(60)));
+
+        verify(transactionRepository, times(2)).save(any(TransactionEntity.class));
+
+        ArgumentCaptor<IdempotencyRecord> captor =
+                ArgumentCaptor.forClass(IdempotencyRecord.class);
+        verify(idempotencyRecordRepository).save(captor.capture());
+        IdempotencyRecord savedRecord = captor.getValue();
+
+        assertEquals("1", savedRecord.getAccountNumber());
+        assertEquals(idempotencyKey, savedRecord.getIdempotencyKey());
+        assertNotNull(savedRecord.getCreatedAt());
+        assertEquals(0, savedRecord.getBalance().compareTo(BigDecimal.valueOf(60)));
+
+        String expectedFingerprint = "TRANSFER" + " | "
+                + "1" + " | "
+                + "2" + " | "
+                + BigDecimal.valueOf(40);
         assertEquals(expectedFingerprint, savedRecord.getRequestFingerprint());
     }
 }
