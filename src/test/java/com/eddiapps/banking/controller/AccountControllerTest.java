@@ -402,6 +402,40 @@ public class AccountControllerTest {
     }
 
     @Test
+    void transfer_withReusedIdempotencyKeyForDifferentRequest_returnsConflict() throws Exception {
+        String idempotencyKey = "transfer-key-123";
+
+        when(accountService.transfer(
+                idempotencyKey,
+                "1",
+                "2",
+                BigDecimal.valueOf(40)
+        )).thenThrow(new IdempotencyConflictException("Idempotency key already used for a different request"));
+
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {
+                                        "senderAccountNumber": "1",
+                                        "recipientAccountNumber": "2",
+                                        "amount": 40
+                                        }
+                                """)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Idempotency key already used for a different request"));
+
+        verify(accountService).transfer(
+                idempotencyKey,
+                "1",
+                "2",
+                BigDecimal.valueOf(40)
+        );
+    }
+
+    @Test
     void getTransactionHistory_withExistingTransactions_returnsTransactionResponses() throws Exception {
         TransactionResponse response1 = new TransactionResponse(
                 TransactionType.DEPOSIT,
