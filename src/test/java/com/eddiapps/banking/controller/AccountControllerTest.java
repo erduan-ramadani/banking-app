@@ -82,10 +82,13 @@ public class AccountControllerTest {
 
     @Test
     void withdraw_returnsAccountResponse() throws Exception {
-        when(accountService.withdraw("1", BigDecimal.valueOf(40)))
+        String idempotencyKey = "withdraw-key-123";
+
+        when(accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(40)))
                 .thenReturn(new AccountResponse("1", BigDecimal.valueOf(60)));
 
         mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -96,6 +99,8 @@ public class AccountControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountNumber").value("1"))
                 .andExpect(jsonPath("$.balance").value(60));
+
+        verify(accountService).withdraw(idempotencyKey, "1", BigDecimal.valueOf(40));
     }
 
     @Test
@@ -124,10 +129,12 @@ public class AccountControllerTest {
 
     @Test
     void withdraw_withInsufficientFunds_returnsInsufficientFundsError() throws Exception {
-        when(accountService.withdraw("1", BigDecimal.valueOf(140)))
+        String idempotencyKey = "withdraw-key-123";
+        when(accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(140)))
                 .thenThrow(new InsufficientFundsException("Insufficient funds"));
 
         mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -138,11 +145,20 @@ public class AccountControllerTest {
                 .andExpect(status().is(HttpStatus.UNPROCESSABLE_CONTENT.value()))
                 .andExpect(jsonPath("$.status").value(422))
                 .andExpect(jsonPath("$.message").value("Insufficient funds"));
+
+        verify(accountService).withdraw(
+                idempotencyKey,
+                "1",
+                BigDecimal.valueOf(140)
+        );
     }
 
     @Test
     void withdraw_withInvalidAmount_returnsBadRequest() throws Exception {
+        String idempotencyKey = "withdraw-key-123";
+
         mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -154,7 +170,33 @@ public class AccountControllerTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Amount must be greater than 0"));
 
-        verify(accountService, never()).withdraw(anyString(), any(BigDecimal.class));
+        verify(accountService, never()).withdraw(anyString(), anyString(), any(BigDecimal.class));
+    }
+
+    @Test
+    void withdraw_withReusedIdempotencyKeyForDifferentRequest_returnsConflict() throws Exception {
+        String idempotencyKey = "withdraw-key-123";
+
+        when(accountService.withdraw(
+                idempotencyKey,
+                "1",
+                BigDecimal.valueOf(60)
+        )).thenThrow(new IdempotencyConflictException("Idempotency key already used for a different request"));
+
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "amount": 60
+                                }
+                                """)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("Idempotency key already used for a different request"));
+
+        verify(accountService).withdraw(idempotencyKey, "1", BigDecimal.valueOf(60));
     }
 
     @Test

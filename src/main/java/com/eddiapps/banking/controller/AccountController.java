@@ -33,9 +33,10 @@ public class AccountController {
     @PostMapping("/{accountNumber}/withdraw")
     AccountResponse withdraw(
             @PathVariable String accountNumber,
-            @Valid @RequestBody AmountRequest request
+            @Valid @RequestBody AmountRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
-        return accountService.withdraw(accountNumber, request.amount());
+        return accountService.withdraw(idempotencyKey, accountNumber, request.amount());
     }
 
     @GetMapping("/{accountNumber}")
