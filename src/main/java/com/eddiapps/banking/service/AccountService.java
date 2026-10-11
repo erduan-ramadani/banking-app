@@ -91,10 +91,10 @@ public class AccountService {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
-        String currentFingerprint = "DEPOSIT" + " | " + accountNumber + " | " + amount;
+        String requestFingerprint = "DEPOSIT" + " | " + accountNumber + " | " + amount;
         Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
         if (existingRecord.isPresent()) {
-            if (!existingRecord.get().getRequestFingerprint().equals(currentFingerprint)) {
+            if (!existingRecord.get().getRequestFingerprint().equals(requestFingerprint)) {
                 throw new IdempotencyConflictException("Idempotency key already used for a different request");
             }
 
@@ -126,7 +126,7 @@ public class AccountService {
 
         idempotencyRecordRepository.save(new IdempotencyRecord(
                 idempotencyKey,
-                currentFingerprint,
+                requestFingerprint,
                 accountNumber,
                 account.getBalance(),
                 Instant.now()
@@ -143,9 +143,29 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse transfer(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
+    public AccountResponse transfer(
+            String idempotencyKey,
+            String senderAccountNumber,
+            String recipientAccountNumber,
+            BigDecimal amount
+    ) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
+        }
+
+        String requestFingerprint = "TRANSFER" + " | "
+                + senderAccountNumber + " | "
+                + recipientAccountNumber + " | "
+                + amount;
+
+        Optional<IdempotencyRecord> idempotencyRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+        if (idempotencyRecord.isPresent()) {
+            IdempotencyRecord existingRecord = idempotencyRecord.get();
+            if (!existingRecord.getRequestFingerprint().equals(requestFingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key already used for a different request");
+            }
+
+            return new AccountResponse(existingRecord.getAccountNumber(), existingRecord.getBalance());
         }
 
         if (senderAccountNumber.equals(recipientAccountNumber)) {
@@ -183,6 +203,14 @@ public class AccountService {
                         recipientAccountNumber
                 )
         );
+
+        idempotencyRecordRepository.save(new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                senderAccountNumber,
+                senderAccount.getBalance(),
+                Instant.now()
+        ));
 
         return new AccountResponse(senderAccountNumber, senderAccount.getBalance());
     }

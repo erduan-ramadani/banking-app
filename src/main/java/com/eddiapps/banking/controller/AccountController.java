@@ -33,8 +33,8 @@ public class AccountController {
     @PostMapping("/{accountNumber}/withdraw")
     AccountResponse withdraw(
             @PathVariable String accountNumber,
-            @Valid @RequestBody AmountRequest request,
-            @RequestHeader("Idempotency-Key") String idempotencyKey
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody AmountRequest request
     ) {
         return accountService.withdraw(idempotencyKey, accountNumber, request.amount());
     }
@@ -48,9 +48,11 @@ public class AccountController {
 
     @PostMapping("/transfer")
     AccountResponse transfer(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody TransferRequest request
     ) {
         return accountService.transfer(
+                idempotencyKey,
                 request.senderAccountNumber(),
                 request.recipientAccountNumber(),
                 request.amount()
