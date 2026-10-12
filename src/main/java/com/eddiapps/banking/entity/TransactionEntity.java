@@ -28,6 +28,13 @@ public class TransactionEntity {
     protected TransactionEntity() {
     }
 
+    public TransactionEntity(String accountNumber, TransactionType type, BigDecimal amount) {
+        this.accountNumber = accountNumber;
+        this.type = type;
+        this.amount = amount;
+        this.timestamp = Instant.now();
+    }
+
     public TransactionEntity(String accountNumber, TransactionType type, BigDecimal amount, String senderAccountNumber, String recipientAccountNumber) {
         this.accountNumber = accountNumber;
         this.type = type;

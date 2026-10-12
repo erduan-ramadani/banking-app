@@ -62,13 +62,7 @@ public class AccountService {
             accountRepository.save(account);
         }
 
-        transactionRepository.save(new TransactionEntity(
-                accountNumber,
-                TransactionType.DEPOSIT,
-                amount,
-                null,
-                null)
-        );
+        transactionRepository.save(new TransactionEntity(accountNumber, TransactionType.DEPOSIT, amount));
 
         saveIdempotencyRecord(idempotencyKey, requestFingerprint, account);
 
@@ -99,13 +93,7 @@ public class AccountService {
 
         account.setBalance(account.getBalance().subtract(amount));
 
-        transactionRepository.save(new TransactionEntity(
-                accountNumber,
-                TransactionType.WITHDRAWAL,
-                amount,
-                null,
-                null)
-        );
+        transactionRepository.save(new TransactionEntity(accountNumber, TransactionType.WITHDRAWAL, amount));
 
         saveIdempotencyRecord(idempotencyKey, requestFingerprint, account);
 
