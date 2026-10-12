@@ -769,4 +769,33 @@ public class AccountServiceTest {
                 + BigDecimal.valueOf(40);
         assertEquals(expectedFingerprint, savedRecord.getRequestFingerprint());
     }
+
+    @Test
+    void deposit_withDifferentBigDecimalScales_treatsAmountsAsEqual() {
+        String idempotencyKey = "deposit-key-123";
+        String requestFingerprint = "DEPOSIT | 1 | 100";
+        IdempotencyRecord idempotencyRecord = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(500),
+                Instant.now()
+        );
+
+        when(idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(idempotencyRecord));
+
+        AccountResponse response = accountService.deposit(
+                idempotencyKey,
+                "1",
+                new BigDecimal("100.00")
+        );
+
+        assertEquals(idempotencyRecord.getBalance(), response.balance());
+        assertEquals(idempotencyRecord.getAccountNumber(), response.accountNumber());
+
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+        verify(idempotencyRecordRepository, never()).save(any(IdempotencyRecord.class));
+    }
 }

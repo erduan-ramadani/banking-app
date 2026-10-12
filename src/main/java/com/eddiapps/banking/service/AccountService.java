@@ -237,16 +237,17 @@ public class AccountService {
             String recipientAccountNumber,
             BigDecimal amount
     ) {
+        String normalizedAmount = amount.stripTrailingZeros().toPlainString();
         if (recipientAccountNumber == null) {
             return type.name() + " | "
                     + accountNumber + " | "
-                    + amount;
+                    + normalizedAmount;
         }
 
         return type.name() + " | "
                 + accountNumber + " | "
                 + recipientAccountNumber + " | "
-                + amount;
+                + normalizedAmount;
     }
 
     private void validateAmount(BigDecimal amount) {
