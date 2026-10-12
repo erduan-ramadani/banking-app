@@ -7,6 +7,9 @@ transaction history.
 
 If a deposit is made to an unknown account number, a new account is created automatically.
 
+Write operations support idempotency through the `Idempotency-Key` HTTP header to prevent duplicate transactions
+when a request is retried.
+
 ## Tech Stack
 
 - Java
@@ -30,10 +33,39 @@ If a deposit is made to an unknown account number, a new account is created auto
 - Transfer money between accounts
 - Transaction history for each account
 - Track deposits, withdrawals and transfers
+- Idempotent write operations using `Idempotency-Key`
+- Detect reuse of an idempotency key for a different request
 - Request validation
 - Global exception handling
 - Service tests
 - Controller tests
+
+## Idempotency
+
+The write endpoints require an `Idempotency-Key` header:
+
+- `POST /api/accounts/{accountNumber}/deposit`
+- `POST /api/accounts/{accountNumber}/withdraw`
+- `POST /api/accounts/transfer`
+
+The key identifies one logical operation.
+
+If the same request is retried with the same key, the original response is returned and the operation is not
+executed again.
+
+If the same key is reused for a different request, the API returns:
+
+```text
+409 Conflict
+```
+
+Example:
+
+```text
+Idempotency-Key: deposit-key-123
+```
+
+A new logical operation should use a new idempotency key.
 
 ## Run the Application
 
@@ -73,6 +105,7 @@ Depositing money into an unknown account automatically creates the account.
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/1/deposit" `
+  -Headers @{ "Idempotency-Key" = "deposit-1-100" } `
   -ContentType "application/json" `
   -Body '{"amount":100}'
 ```
@@ -103,10 +136,13 @@ accountNumber balance
 
 ### 3. Add another deposit
 
+This is a new logical operation and therefore uses a new idempotency key.
+
 ```powershell
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/1/deposit" `
+  -Headers @{ "Idempotency-Key" = "deposit-1-50" } `
   -ContentType "application/json" `
   -Body '{"amount":50}'
 ```
@@ -125,6 +161,7 @@ accountNumber balance
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/1/withdraw" `
+  -Headers @{ "Idempotency-Key" = "withdraw-1-40" } `
   -ContentType "application/json" `
   -Body '{"amount":40}'
 ```
@@ -161,6 +198,7 @@ The balance is currently 110. Trying to withdraw 200 should fail.
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/1/withdraw" `
+  -Headers @{ "Idempotency-Key" = "withdraw-1-200" } `
   -ContentType "application/json" `
   -Body '{"amount":200}'
 ```
@@ -183,6 +221,7 @@ Deposit and withdrawal amounts must be greater than zero.
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/1/deposit" `
+  -Headers @{ "Idempotency-Key" = "deposit-invalid-1" } `
   -ContentType "application/json" `
   -Body '{"amount":0}'
 ```
@@ -221,6 +260,7 @@ Expected response:
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/2/deposit" `
+  -Headers @{ "Idempotency-Key" = "deposit-2-50" } `
   -ContentType "application/json" `
   -Body '{"amount":50}'
 ```
@@ -241,6 +281,7 @@ Transfer 40 from account 1 to account 2.
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/transfer" `
+  -Headers @{ "Idempotency-Key" = "transfer-1-2-40" } `
   -ContentType "application/json" `
   -Body '{
     "senderAccountNumber":"1",
@@ -299,6 +340,7 @@ accountNumber balance
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/transfer" `
+  -Headers @{ "Idempotency-Key" = "transfer-insufficient-1" } `
   -ContentType "application/json" `
   -Body '{
     "senderAccountNumber":"1",
@@ -325,6 +367,7 @@ The account balances remain unchanged.
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/api/accounts/transfer" `
+  -Headers @{ "Idempotency-Key" = "transfer-same-account-1" } `
   -ContentType "application/json" `
   -Body '{
     "senderAccountNumber":"1",
@@ -421,6 +464,89 @@ Expected response:
 }
 ```
 
+### 17. Test an idempotent retry
+
+Create another account:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/accounts/3/deposit" `
+  -Headers @{ "Idempotency-Key" = "idempotency-demo-123" } `
+  -ContentType "application/json" `
+  -Body '{"amount":100}'
+```
+
+Expected result:
+
+```text
+accountNumber balance
+------------- -------
+3             100
+```
+
+Send exactly the same request again with the same idempotency key:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/accounts/3/deposit" `
+  -Headers @{ "Idempotency-Key" = "idempotency-demo-123" } `
+  -ContentType "application/json" `
+  -Body '{"amount":100}'
+```
+
+Expected result:
+
+```text
+accountNumber balance
+------------- -------
+3             100
+```
+
+The deposit is not executed a second time.
+
+Verify the balance:
+
+```powershell
+Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:8080/api/accounts/3"
+```
+
+Expected result:
+
+```text
+accountNumber balance
+------------- -------
+3             100
+```
+
+### 18. Test reuse of an idempotency key for a different request
+
+Reuse the previous key but change the amount:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/api/accounts/3/deposit" `
+  -Headers @{ "Idempotency-Key" = "idempotency-demo-123" } `
+  -ContentType "application/json" `
+  -Body '{"amount":200}'
+```
+
+Expected response:
+
+```json
+{
+  "status": 409,
+  "message": "Idempotency key already used for a different request",
+  "timestamp": "..."
+}
+```
+
+The balance remains unchanged.
+
 ## Error Handling
 
 The application uses a global exception handler.
@@ -431,6 +557,7 @@ Possible errors include:
 - `400 Bad Request` if the amount is invalid
 - `422 Unprocessable Content` if the account does not have enough funds
 - `400 Bad Request` if sender and recipient accounts are identical
+- `409 Conflict` if an `Idempotency-Key` is reused for a different request
 
 ## Tests
 
@@ -454,6 +581,11 @@ Covered scenarios include:
 - persistence of withdrawal history
 - persistence of transfer history for sender and recipient
 - prevention of history entries for failed operations
+- returning the stored response for an idempotent retry
+- preventing duplicate transaction execution for repeated requests
+- rejecting reuse of an idempotency key for a different request
+- persistence of idempotency records for deposits, withdrawals and transfers
+- controller handling of idempotency conflicts
 
 Run all automated tests with:
 
