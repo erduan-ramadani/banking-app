@@ -38,9 +38,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidAmountException("Amount must be > 0");
-        }
+        validateAmount(amount);
 
         String requestFingerprint = buildFingerprint(
                 TransactionType.DEPOSIT,
@@ -80,9 +78,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidAmountException("Amount must be > 0");
-        }
+        validateAmount(amount);
 
         String requestFingerprint = buildFingerprint(
                 TransactionType.WITHDRAWAL,
@@ -125,9 +121,7 @@ public class AccountService {
             String recipientAccountNumber,
             BigDecimal amount
     ) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidAmountException("Amount must be > 0");
-        }
+        validateAmount(amount);
 
         String requestFingerprint = buildFingerprint(
                 TransactionType.TRANSFER,
@@ -253,5 +247,11 @@ public class AccountService {
                 + accountNumber + " | "
                 + recipientAccountNumber + " | "
                 + amount;
+    }
+
+    private void validateAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException("Amount must be > 0");
+        }
     }
 }
