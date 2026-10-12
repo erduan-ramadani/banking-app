@@ -40,11 +40,7 @@ public class AccountService {
     public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
         validateAmount(amount);
 
-        String requestFingerprint = buildFingerprint(
-                TransactionType.DEPOSIT,
-                accountNumber,
-                amount
-        );
+        String requestFingerprint = buildFingerprint(TransactionType.DEPOSIT, accountNumber, amount);
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -73,11 +69,7 @@ public class AccountService {
     public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
         validateAmount(amount);
 
-        String requestFingerprint = buildFingerprint(
-                TransactionType.WITHDRAWAL,
-                accountNumber,
-                amount
-        );
+        String requestFingerprint = buildFingerprint(TransactionType.WITHDRAWAL, accountNumber, amount);
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -109,11 +101,7 @@ public class AccountService {
     ) {
         validateAmount(amount);
 
-        String requestFingerprint = buildTransferFingerprint(
-                senderAccountNumber,
-                recipientAccountNumber,
-                amount
-        );
+        String requestFingerprint = buildTransferFingerprint(senderAccountNumber, recipientAccountNumber, amount);
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -193,19 +181,13 @@ public class AccountService {
                 throw new IdempotencyConflictException("Idempotency key already used for a different request");
             }
 
-            return Optional.of(new AccountResponse(
-                    idempotencyRecord.getAccountNumber(),
-                    idempotencyRecord.getBalance()
-            ));
+            return Optional.of(
+                    new AccountResponse(idempotencyRecord.getAccountNumber(), idempotencyRecord.getBalance()));
         }
         return Optional.empty();
     }
 
-    private void saveIdempotencyRecord(
-            String idempotencyKey,
-            String requestFingerprint,
-            AccountEntity account
-    ) {
+    private void saveIdempotencyRecord(String idempotencyKey, String requestFingerprint, AccountEntity account) {
         idempotencyRecordRepository.save(
                 new IdempotencyRecord(
                         idempotencyKey,
@@ -217,20 +199,14 @@ public class AccountService {
         );
     }
 
-    private String buildFingerprint(TransactionType type,
-                                    String accountNumber,
-                                    BigDecimal amount
-    ) {
+    private String buildFingerprint(TransactionType type, String accountNumber, BigDecimal amount) {
         String normalizedAmount = amount.stripTrailingZeros().toPlainString();
         return type.name() + " | "
                 + accountNumber + " | "
                 + normalizedAmount;
     }
 
-    private String buildTransferFingerprint(String senderAccountNumber,
-                                            String recipientAccountNumber,
-                                            BigDecimal amount
-    ) {
+    private String buildTransferFingerprint(String senderAccountNumber, String recipientAccountNumber, BigDecimal amount) {
         String normalizedAmount = amount.stripTrailingZeros().toPlainString();
         return TransactionType.TRANSFER.name() + " | "
                 + senderAccountNumber + " | "
