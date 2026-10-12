@@ -2,6 +2,7 @@ package com.eddiapps.banking.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -216,5 +217,37 @@ class AccountControllerEndToEndTest {
         Optional<AccountEntity> account = accountRepository.findByAccountNumber("1");
         assertTrue(account.isPresent());
         assertEquals(0, account.get().getBalance().compareTo(BigDecimal.valueOf(100)));
+    }
+
+    @Test
+    void transactionHistory_afterTransfer_returnsPersistedTransactions() throws Exception {
+        String idempotencyKey1 = "e2e-deposit-sender";
+        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
+
+        String idempotencyKey2 = "e2e-deposit-recipient";
+        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+
+        String idempotencyKey3 = "e2e-transfer-1";
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .header("Idempotency-Key", idempotencyKey3)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "senderAccountNumber": "1",
+                                "recipientAccountNumber": "2",
+                                "amount": 40
+                                }
+                                """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber").value("1"))
+                .andExpect(jsonPath("$.balance").value(60));
+
+        mockMvc.perform(get("/api/accounts/1/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("TRANSFER"))
+                .andExpect(jsonPath("$[0].amount").value(40))
+                .andExpect(jsonPath("$[0].senderAccountNumber").value("1"))
+                .andExpect(jsonPath("$[0].recipientAccountNumber").value("2"));
     }
 }
