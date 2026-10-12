@@ -60,7 +60,6 @@ class AccountControllerEndToEndTest {
     @Test
     void deposit_withSameIdempotencyKey_doesNotApplyDepositTwice() throws Exception {
         String idempotencyKey = "e2e-deposit-2";
-
         mockMvc.perform(post("/api/accounts/2/deposit")
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -95,7 +94,6 @@ class AccountControllerEndToEndTest {
     @Test
     void deposit_withSameIdempotencyKeyAndDifferentAmount_returnsConflict() throws Exception {
         String idempotencyKey = "e2e-deposit-3";
-
         mockMvc.perform(post("/api/accounts/3/deposit")
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -129,11 +127,7 @@ class AccountControllerEndToEndTest {
 
     @Test
     void transfer_withValidRequest_updatesBothAccounts() throws Exception {
-        String idempotencyKey1 = "e2e-deposit-sender";
-        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
-
-        String idempotencyKey2 = "e2e-deposit-recipient";
-        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+        prepareTransferAccounts();
 
         String idempotencyKey3 = "e2e-transfer-1";
         mockMvc.perform(post("/api/accounts/transfer")
@@ -162,11 +156,7 @@ class AccountControllerEndToEndTest {
 
     @Test
     void transfer_withInsufficientFunds_returnsUnprocessableEntityAndKeepsBalances() throws Exception {
-        String idempotencyKey1 = "e2e-deposit-sender";
-        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
-
-        String idempotencyKey2 = "e2e-deposit-recipient";
-        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+        prepareTransferAccounts();
 
         String idempotencyKey3 = "e2e-transfer-1";
         mockMvc.perform(post("/api/accounts/transfer")
@@ -195,12 +185,11 @@ class AccountControllerEndToEndTest {
 
     @Test
     void transfer_toSameAccount_returnsBadRequestAndKeepsBalance() throws Exception {
-        String idempotencyKey = "e2e-deposit-1";
-        accountService.deposit(idempotencyKey, "1", BigDecimal.valueOf(100));
+        prepareTransferAccounts();
 
-        String idempotencyKey2 = "e2e-transfer-1";
+        String idempotencyKey3 = "e2e-transfer-1";
         mockMvc.perform(post("/api/accounts/transfer")
-                        .header("Idempotency-Key", idempotencyKey2)
+                        .header("Idempotency-Key", idempotencyKey3)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -221,11 +210,7 @@ class AccountControllerEndToEndTest {
 
     @Test
     void transactionHistory_afterTransfer_returnsPersistedTransactions() throws Exception {
-        String idempotencyKey1 = "e2e-deposit-sender";
-        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
-
-        String idempotencyKey2 = "e2e-deposit-recipient";
-        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+        prepareTransferAccounts();
 
         String idempotencyKey3 = "e2e-transfer-1";
         mockMvc.perform(post("/api/accounts/transfer")
@@ -249,5 +234,13 @@ class AccountControllerEndToEndTest {
                 .andExpect(jsonPath("$[0].amount").value(40))
                 .andExpect(jsonPath("$[0].senderAccountNumber").value("1"))
                 .andExpect(jsonPath("$[0].recipientAccountNumber").value("2"));
+    }
+
+    private void prepareTransferAccounts() {
+        String idempotencyKey1 = "e2e-deposit-sender";
+        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
+
+        String idempotencyKey2 = "e2e-deposit-recipient";
+        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
     }
 }
