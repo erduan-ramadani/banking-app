@@ -236,6 +236,14 @@ class AccountControllerEndToEndTest {
                 .andExpect(jsonPath("$[0].recipientAccountNumber").value("2"));
     }
 
+    @Test
+    void transactionHistory_forUnknownAccount_returnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/accounts/99/history"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("Account not found"));
+    }
+
     private void prepareTransferAccounts() {
         String idempotencyKey1 = "e2e-deposit-sender";
         accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
