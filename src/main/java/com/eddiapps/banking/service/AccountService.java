@@ -42,7 +42,12 @@ public class AccountService {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
-        String requestFingerprint = "DEPOSIT" + " | " + accountNumber + " | " + amount;
+        String requestFingerprint = buildFingerprint(
+                TransactionType.DEPOSIT,
+                accountNumber,
+                null,
+                amount
+        );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -79,7 +84,12 @@ public class AccountService {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
-        String requestFingerprint = "WITHDRAWAL" + " | " + accountNumber + " | " + amount;
+        String requestFingerprint = buildFingerprint(
+                TransactionType.WITHDRAWAL,
+                accountNumber,
+                null,
+                amount
+        );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -119,10 +129,11 @@ public class AccountService {
             throw new InvalidAmountException("Amount must be > 0");
         }
 
-        String requestFingerprint = "TRANSFER" + " | "
-                + senderAccountNumber + " | "
-                + recipientAccountNumber + " | "
-                + amount;
+        String requestFingerprint = buildFingerprint(
+                TransactionType.TRANSFER,
+                senderAccountNumber,
+                recipientAccountNumber, amount
+        );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
@@ -224,5 +235,23 @@ public class AccountService {
                         Instant.now()
                 )
         );
+    }
+
+    private String buildFingerprint(
+            TransactionType type,
+            String accountNumber,
+            String recipientAccountNumber,
+            BigDecimal amount
+    ) {
+        if (recipientAccountNumber == null) {
+            return type.name() + " | "
+                    + accountNumber + " | "
+                    + amount;
+        }
+
+        return type.name() + " | "
+                + accountNumber + " | "
+                + recipientAccountNumber + " | "
+                + amount;
     }
 }
