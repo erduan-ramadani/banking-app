@@ -24,16 +24,16 @@ import java.util.Optional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-public class AccountControllerEndToEndTest {
+class AccountControllerEndToEndTest {
 
     @Autowired
-    private AccountRepository accountRepository;
+    private MockMvc mockMvc;
 
     @Autowired
     private AccountService accountService;
 
     @Autowired
-    private MockMvc mockMvc;
+    private AccountRepository accountRepository;
 
     @Test
     void deposit_withValidRequest_returnsOkAndPersistsAccount() throws Exception {
@@ -157,5 +157,64 @@ public class AccountControllerEndToEndTest {
         Optional<AccountEntity> receiverAccount = accountRepository.findByAccountNumber("2");
         assertTrue(receiverAccount.isPresent());
         assertEquals(0, receiverAccount.get().getBalance().compareTo(BigDecimal.valueOf(90)));
+    }
+
+    @Test
+    void transfer_withInsufficientFunds_returnsUnprocessableEntityAndKeepsBalances() throws Exception {
+        String idempotencyKey1 = "e2e-deposit-sender";
+        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
+
+        String idempotencyKey2 = "e2e-deposit-recipient";
+        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+
+        String idempotencyKey3 = "e2e-transfer-1";
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .header("Idempotency-Key", idempotencyKey3)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "senderAccountNumber": "1",
+                                "recipientAccountNumber": "2",
+                                "amount": 150
+                                }
+                                """)
+                )
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.message").value("Insufficient funds"));
+
+        Optional<AccountEntity> senderAccount = accountRepository.findByAccountNumber("1");
+        assertTrue(senderAccount.isPresent());
+        assertEquals(0, senderAccount.get().getBalance().compareTo(BigDecimal.valueOf(100)));
+
+        Optional<AccountEntity> receiverAccount = accountRepository.findByAccountNumber("2");
+        assertTrue(receiverAccount.isPresent());
+        assertEquals(0, receiverAccount.get().getBalance().compareTo(BigDecimal.valueOf(50)));
+    }
+
+    @Test
+    void transfer_toSameAccount_returnsBadRequestAndKeepsBalance() throws Exception {
+        String idempotencyKey = "e2e-deposit-1";
+        accountService.deposit(idempotencyKey, "1", BigDecimal.valueOf(100));
+
+        String idempotencyKey2 = "e2e-transfer-1";
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .header("Idempotency-Key", idempotencyKey2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "senderAccountNumber": "1",
+                                "recipientAccountNumber": "1",
+                                "amount": 50
+                                }
+                                """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Sender and recipient must be different"));
+
+        Optional<AccountEntity> account = accountRepository.findByAccountNumber("1");
+        assertTrue(account.isPresent());
+        assertEquals(0, account.get().getBalance().compareTo(BigDecimal.valueOf(100)));
     }
 }
