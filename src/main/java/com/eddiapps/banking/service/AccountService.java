@@ -37,65 +37,6 @@ public class AccountService {
     }
 
     @Transactional
-    public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidAmountException("Amount must be > 0");
-        }
-
-        String requestFingerprint = "WITHDRAWAL" + " | " + accountNumber + " | " + amount;
-        Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
-        if (idempotentResponse.isPresent()) {
-            return idempotentResponse.get();
-        }
-
-        AccountEntity account = accountRepository
-                .findByAccountNumber(accountNumber)
-                .orElseThrow(() -> new AccountNotFoundException("Account not found"));
-
-        if (account.getBalance().compareTo(amount) < 0) {
-            throw new InsufficientFundsException("Insufficient funds");
-        }
-
-        account.setBalance(account.getBalance().subtract(amount));
-
-        transactionRepository.save(new TransactionEntity(
-                accountNumber,
-                TransactionType.WITHDRAWAL,
-                amount,
-                null,
-                null)
-        );
-
-        idempotencyRecordRepository.save(
-                new IdempotencyRecord(
-                        idempotencyKey,
-                        requestFingerprint,
-                        accountNumber,
-                        account.getBalance(),
-                        Instant.now()
-                )
-        );
-
-        return new AccountResponse(accountNumber, account.getBalance());
-    }
-
-    private Optional<AccountResponse> findStoredIdempotentResponse(String idempotencyKey, String requestFingerprint) {
-        Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
-        if (existingRecord.isPresent()) {
-            IdempotencyRecord idempotencyRecord = existingRecord.get();
-            if (!idempotencyRecord.getRequestFingerprint().equals(requestFingerprint)) {
-                throw new IdempotencyConflictException("Idempotency key already used for a different request");
-            }
-
-            return Optional.of(new AccountResponse(
-                    idempotencyRecord.getAccountNumber(),
-                    idempotencyRecord.getBalance()
-            ));
-        }
-        return Optional.empty();
-    }
-
-    @Transactional
     public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException("Amount must be > 0");
@@ -136,12 +77,47 @@ public class AccountService {
         ));
         return new AccountResponse(accountNumber, account.getBalance());
     }
+    
+    @Transactional
+    public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException("Amount must be > 0");
+        }
 
-    @Transactional(readOnly = true)
-    public AccountResponse getBalance(String accountNumber) {
+        String requestFingerprint = "WITHDRAWAL" + " | " + accountNumber + " | " + amount;
+        Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
+        }
+
         AccountEntity account = accountRepository
                 .findByAccountNumber(accountNumber)
                 .orElseThrow(() -> new AccountNotFoundException("Account not found"));
+
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException("Insufficient funds");
+        }
+
+        account.setBalance(account.getBalance().subtract(amount));
+
+        transactionRepository.save(new TransactionEntity(
+                accountNumber,
+                TransactionType.WITHDRAWAL,
+                amount,
+                null,
+                null)
+        );
+
+        idempotencyRecordRepository.save(
+                new IdempotencyRecord(
+                        idempotencyKey,
+                        requestFingerprint,
+                        accountNumber,
+                        account.getBalance(),
+                        Instant.now()
+                )
+        );
+
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
@@ -213,6 +189,14 @@ public class AccountService {
     }
 
     @Transactional(readOnly = true)
+    public AccountResponse getBalance(String accountNumber) {
+        AccountEntity account = accountRepository
+                .findByAccountNumber(accountNumber)
+                .orElseThrow(() -> new AccountNotFoundException("Account not found"));
+        return new AccountResponse(accountNumber, account.getBalance());
+    }
+
+    @Transactional(readOnly = true)
     public List<TransactionResponse> getTransactionHistory(String accountNumber) {
         accountRepository.findByAccountNumber(accountNumber).orElseThrow(
                 () -> new AccountNotFoundException("Account not found"));
@@ -227,5 +211,21 @@ public class AccountService {
                         entity.getRecipientAccountNumber()
                 )
         ).toList();
+    }
+
+    private Optional<AccountResponse> findStoredIdempotentResponse(String idempotencyKey, String requestFingerprint) {
+        Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingRecord.isPresent()) {
+            IdempotencyRecord idempotencyRecord = existingRecord.get();
+            if (!idempotencyRecord.getRequestFingerprint().equals(requestFingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key already used for a different request");
+            }
+
+            return Optional.of(new AccountResponse(
+                    idempotencyRecord.getAccountNumber(),
+                    idempotencyRecord.getBalance()
+            ));
+        }
+        return Optional.empty();
     }
 }
