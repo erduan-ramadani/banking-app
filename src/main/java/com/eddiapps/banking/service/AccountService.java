@@ -43,7 +43,6 @@ public class AccountService {
         String requestFingerprint = buildFingerprint(
                 TransactionType.DEPOSIT,
                 accountNumber,
-                null,
                 amount
         );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
@@ -83,7 +82,6 @@ public class AccountService {
         String requestFingerprint = buildFingerprint(
                 TransactionType.WITHDRAWAL,
                 accountNumber,
-                null,
                 amount
         );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
@@ -123,10 +121,10 @@ public class AccountService {
     ) {
         validateAmount(amount);
 
-        String requestFingerprint = buildFingerprint(
-                TransactionType.TRANSFER,
+        String requestFingerprint = buildTransferFingerprint(
                 senderAccountNumber,
-                recipientAccountNumber, amount
+                recipientAccountNumber,
+                amount
         );
         Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
         if (idempotentResponse.isPresent()) {
@@ -231,21 +229,23 @@ public class AccountService {
         );
     }
 
-    private String buildFingerprint(
-            TransactionType type,
-            String accountNumber,
-            String recipientAccountNumber,
-            BigDecimal amount
+    private String buildFingerprint(TransactionType type,
+                                    String accountNumber,
+                                    BigDecimal amount
     ) {
         String normalizedAmount = amount.stripTrailingZeros().toPlainString();
-        if (recipientAccountNumber == null) {
-            return type.name() + " | "
-                    + accountNumber + " | "
-                    + normalizedAmount;
-        }
-
         return type.name() + " | "
                 + accountNumber + " | "
+                + normalizedAmount;
+    }
+
+    private String buildTransferFingerprint(String senderAccountNumber,
+                                            String recipientAccountNumber,
+                                            BigDecimal amount
+    ) {
+        String normalizedAmount = amount.stripTrailingZeros().toPlainString();
+        return TransactionType.TRANSFER.name() + " | "
+                + senderAccountNumber + " | "
                 + recipientAccountNumber + " | "
                 + normalizedAmount;
     }
