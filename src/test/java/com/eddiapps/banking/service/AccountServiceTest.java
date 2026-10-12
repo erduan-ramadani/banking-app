@@ -798,4 +798,15 @@ public class AccountServiceTest {
         verify(transactionRepository, never()).save(any(TransactionEntity.class));
         verify(idempotencyRecordRepository, never()).save(any(IdempotencyRecord.class));
     }
+
+    @Test
+    void deposit_withInvalidIdempotencyKey_throwsInvalidIdempotencyKeyException() {
+        assertThrows(InvalidIdempotencyKeyException.class,
+                () -> accountService.deposit(" ", "1", BigDecimal.valueOf(100))
+        );
+
+        verify(accountRepository, never()).findByAccountNumber(anyString());
+        verify(transactionRepository, never()).save(any(TransactionEntity.class));
+        verify(idempotencyRecordRepository, never()).save(any(IdempotencyRecord.class));
+    }
 }

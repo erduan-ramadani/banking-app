@@ -8,10 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.eddiapps.banking.dto.AccountResponse;
 import com.eddiapps.banking.dto.TransactionResponse;
-import com.eddiapps.banking.exception.AccountNotFoundException;
-import com.eddiapps.banking.exception.IdempotencyConflictException;
-import com.eddiapps.banking.exception.InsufficientFundsException;
-import com.eddiapps.banking.exception.InvalidTransferException;
+import com.eddiapps.banking.exception.*;
 import com.eddiapps.banking.model.TransactionType;
 import com.eddiapps.banking.service.AccountService;
 
@@ -195,6 +192,28 @@ public class AccountControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Idempotency key already used for a different request"));
+
+        verify(accountService).withdraw(idempotencyKey, "1", BigDecimal.valueOf(60));
+    }
+
+    @Test
+    void withdraw_withInvalidIdempotencyKey_returnsBadRequest() throws Exception {
+        String idempotencyKey = " ";
+        when(accountService.withdraw(idempotencyKey, "1", BigDecimal.valueOf(60)))
+                .thenThrow(new InvalidIdempotencyKeyException("The idempotency key is not valid"));
+
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "amount": 60
+                                }
+                                """)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("The idempotency key is not valid"));
 
         verify(accountService).withdraw(idempotencyKey, "1", BigDecimal.valueOf(60));
     }

@@ -38,6 +38,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
+        validateIdempotencyKey(idempotencyKey);
         validateAmount(amount);
 
         String requestFingerprint = buildFingerprint(TransactionType.DEPOSIT, accountNumber, amount);
@@ -67,6 +68,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
+        validateIdempotencyKey(idempotencyKey);
         validateAmount(amount);
 
         String requestFingerprint = buildFingerprint(TransactionType.WITHDRAWAL, accountNumber, amount);
@@ -99,6 +101,7 @@ public class AccountService {
             String recipientAccountNumber,
             BigDecimal amount
     ) {
+        validateIdempotencyKey(idempotencyKey);
         validateAmount(amount);
 
         String requestFingerprint = buildTransferFingerprint(senderAccountNumber, recipientAccountNumber, amount);
@@ -212,6 +215,12 @@ public class AccountService {
                 + senderAccountNumber + " | "
                 + recipientAccountNumber + " | "
                 + normalizedAmount;
+    }
+
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidIdempotencyKeyException("The idempotency key is not valid");
+        }
     }
 
     private void validateAmount(BigDecimal amount) {
