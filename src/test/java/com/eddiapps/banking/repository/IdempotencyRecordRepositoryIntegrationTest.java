@@ -1,6 +1,6 @@
 package com.eddiapps.banking.repository;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 import com.eddiapps.banking.entity.IdempotencyRecord;
 
@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 @DataJpaTest
 public class IdempotencyRecordRepositoryIntegrationTest {
@@ -43,5 +44,24 @@ public class IdempotencyRecordRepositoryIntegrationTest {
         assertThrows(DataIntegrityViolationException.class,
                 () -> idempotencyRecordRepository.saveAndFlush(idempotencyRecord2)
         );
+    }
+
+    @Test
+    void findByIdempotencyKey_withExistingRecord_returnsRecord() {
+        String idempotencyKey = "deposit-key123";
+        String requestFingerprint = "DEPOSIT | 1 | 100";
+        IdempotencyRecord idempotencyRecord = new IdempotencyRecord(
+                idempotencyKey,
+                requestFingerprint,
+                "1",
+                BigDecimal.valueOf(50),
+                Instant.now()
+        );
+        idempotencyRecordRepository.saveAndFlush(idempotencyRecord);
+        Optional<IdempotencyRecord> loadedIdempotencyRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+
+        assertTrue(loadedIdempotencyRecord.isPresent());
+        assertEquals(idempotencyRecord.getIdempotencyKey(), loadedIdempotencyRecord.get().getIdempotencyKey());
+        assertEquals(idempotencyRecord.getRequestFingerprint(), loadedIdempotencyRecord.get().getRequestFingerprint());
     }
 }
