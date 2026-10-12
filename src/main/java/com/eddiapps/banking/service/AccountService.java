@@ -68,16 +68,11 @@ public class AccountService {
                 null)
         );
 
-        idempotencyRecordRepository.save(new IdempotencyRecord(
-                idempotencyKey,
-                requestFingerprint,
-                accountNumber,
-                account.getBalance(),
-                Instant.now()
-        ));
+        saveIdempotencyRecord(idempotencyKey, requestFingerprint, account);
+
         return new AccountResponse(accountNumber, account.getBalance());
     }
-    
+
     @Transactional
     public AccountResponse withdraw(String idempotencyKey, String accountNumber, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -108,15 +103,7 @@ public class AccountService {
                 null)
         );
 
-        idempotencyRecordRepository.save(
-                new IdempotencyRecord(
-                        idempotencyKey,
-                        requestFingerprint,
-                        accountNumber,
-                        account.getBalance(),
-                        Instant.now()
-                )
-        );
+        saveIdempotencyRecord(idempotencyKey, requestFingerprint, account);
 
         return new AccountResponse(accountNumber, account.getBalance());
     }
@@ -177,13 +164,7 @@ public class AccountService {
                 )
         );
 
-        idempotencyRecordRepository.save(new IdempotencyRecord(
-                idempotencyKey,
-                requestFingerprint,
-                senderAccountNumber,
-                senderAccount.getBalance(),
-                Instant.now()
-        ));
+        saveIdempotencyRecord(idempotencyKey, requestFingerprint, senderAccount);
 
         return new AccountResponse(senderAccountNumber, senderAccount.getBalance());
     }
@@ -227,5 +208,21 @@ public class AccountService {
             ));
         }
         return Optional.empty();
+    }
+
+    private void saveIdempotencyRecord(
+            String idempotencyKey,
+            String requestFingerprint,
+            AccountEntity account
+    ) {
+        idempotencyRecordRepository.save(
+                new IdempotencyRecord(
+                        idempotencyKey,
+                        requestFingerprint,
+                        account.getAccountNumber(),
+                        account.getBalance(),
+                        Instant.now()
+                )
+        );
     }
 }
