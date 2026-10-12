@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.eddiapps.banking.entity.AccountEntity;
 import com.eddiapps.banking.repository.AccountRepository;
+import com.eddiapps.banking.service.AccountService;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,9 @@ public class AccountControllerEndToEndTest {
 
     @Autowired
     private AccountRepository accountRepository;
+
+    @Autowired
+    private AccountService accountService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -120,5 +124,38 @@ public class AccountControllerEndToEndTest {
         Optional<AccountEntity> account = accountRepository.findByAccountNumber("3");
         assertTrue(account.isPresent());
         assertEquals(0, account.get().getBalance().compareTo(BigDecimal.valueOf(100)));
+    }
+
+    @Test
+    void transfer_withValidRequest_updatesBothAccounts() throws Exception {
+        String idempotencyKey1 = "e2e-deposit-sender";
+        accountService.deposit(idempotencyKey1, "1", BigDecimal.valueOf(100));
+
+        String idempotencyKey2 = "e2e-deposit-recipient";
+        accountService.deposit(idempotencyKey2, "2", BigDecimal.valueOf(50));
+
+        String idempotencyKey3 = "e2e-transfer-1";
+        mockMvc.perform(post("/api/accounts/transfer")
+                        .header("Idempotency-Key", idempotencyKey3)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                "senderAccountNumber": "1",
+                                "recipientAccountNumber": "2",
+                                "amount": 40
+                                }
+                                """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber").value("1"))
+                .andExpect(jsonPath("$.balance").value(60));
+
+        Optional<AccountEntity> senderAccount = accountRepository.findByAccountNumber("1");
+        assertTrue(senderAccount.isPresent());
+        assertEquals(0, senderAccount.get().getBalance().compareTo(BigDecimal.valueOf(60)));
+
+        Optional<AccountEntity> receiverAccount = accountRepository.findByAccountNumber("2");
+        assertTrue(receiverAccount.isPresent());
+        assertEquals(0, receiverAccount.get().getBalance().compareTo(BigDecimal.valueOf(90)));
     }
 }
