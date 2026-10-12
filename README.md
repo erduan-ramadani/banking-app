@@ -50,6 +50,8 @@ The write endpoints require an `Idempotency-Key` header:
 
 The key identifies one logical operation.
 
+The key must not be empty or contain only whitespace. Invalid idempotency keys return `400 Bad Request`.
+
 If the same request is retried with the same key, the original response is returned and the operation is not
 executed again.
 
@@ -66,6 +68,15 @@ Idempotency-Key: deposit-key-123
 ```
 
 A new logical operation should use a new idempotency key.
+
+The idempotency key is also protected by a database-level unique constraint, so the same key cannot be stored twice.
+
+### Known concurrency limitation
+
+Two requests with the same new idempotency key that arrive at almost exactly the same time can both pass the initial
+lookup before either request has stored its idempotency record.
+In that race condition, one request can succeed while the other collides with the unique constraint.
+Full concurrency coordination for idempotency keys is not implemented yet.
 
 ## Run the Application
 
@@ -558,6 +569,7 @@ Possible errors include:
 - `422 Unprocessable Content` if the account does not have enough funds
 - `400 Bad Request` if sender and recipient accounts are identical
 - `409 Conflict` if an `Idempotency-Key` is reused for a different request
+- `400 Bad Request` if an `Idempotency-Key` is empty or blank
 
 ## Tests
 
@@ -586,6 +598,7 @@ Covered scenarios include:
 - rejecting reuse of an idempotency key for a different request
 - persistence of idempotency records for deposits, withdrawals and transfers
 - controller handling of idempotency conflicts
+- rejection of invalid idempotency keys
 
 Run all automated tests with:
 
