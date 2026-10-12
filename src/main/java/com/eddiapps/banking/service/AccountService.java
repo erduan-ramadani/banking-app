@@ -43,15 +43,9 @@ public class AccountService {
         }
 
         String requestFingerprint = "WITHDRAWAL" + " | " + accountNumber + " | " + amount;
-
-        Optional<IdempotencyRecord> idempotencyRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
-        if (idempotencyRecord.isPresent()) {
-            IdempotencyRecord existingRecord = idempotencyRecord.get();
-            if (!existingRecord.getRequestFingerprint().equals(requestFingerprint)) {
-                throw new IdempotencyConflictException("Idempotency key already used for a different request");
-            }
-
-            return new AccountResponse(existingRecord.getAccountNumber(), existingRecord.getBalance());
+        Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
         }
 
         AccountEntity account = accountRepository
@@ -85,6 +79,22 @@ public class AccountService {
         return new AccountResponse(accountNumber, account.getBalance());
     }
 
+    private Optional<AccountResponse> findStoredIdempotentResponse(String idempotencyKey, String requestFingerprint) {
+        Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingRecord.isPresent()) {
+            IdempotencyRecord idempotencyRecord = existingRecord.get();
+            if (!idempotencyRecord.getRequestFingerprint().equals(requestFingerprint)) {
+                throw new IdempotencyConflictException("Idempotency key already used for a different request");
+            }
+
+            return Optional.of(new AccountResponse(
+                    idempotencyRecord.getAccountNumber(),
+                    idempotencyRecord.getBalance()
+            ));
+        }
+        return Optional.empty();
+    }
+
     @Transactional
     public AccountResponse deposit(String idempotencyKey, String accountNumber, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -92,16 +102,9 @@ public class AccountService {
         }
 
         String requestFingerprint = "DEPOSIT" + " | " + accountNumber + " | " + amount;
-        Optional<IdempotencyRecord> existingRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
-        if (existingRecord.isPresent()) {
-            if (!existingRecord.get().getRequestFingerprint().equals(requestFingerprint)) {
-                throw new IdempotencyConflictException("Idempotency key already used for a different request");
-            }
-
-            return new AccountResponse(
-                    existingRecord.get().getAccountNumber(),
-                    existingRecord.get().getBalance()
-            );
+        Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
         }
 
         Optional<AccountEntity> existingAccount =
@@ -157,15 +160,9 @@ public class AccountService {
                 + senderAccountNumber + " | "
                 + recipientAccountNumber + " | "
                 + amount;
-
-        Optional<IdempotencyRecord> idempotencyRecord = idempotencyRecordRepository.findByIdempotencyKey(idempotencyKey);
-        if (idempotencyRecord.isPresent()) {
-            IdempotencyRecord existingRecord = idempotencyRecord.get();
-            if (!existingRecord.getRequestFingerprint().equals(requestFingerprint)) {
-                throw new IdempotencyConflictException("Idempotency key already used for a different request");
-            }
-
-            return new AccountResponse(existingRecord.getAccountNumber(), existingRecord.getBalance());
+        Optional<AccountResponse> idempotentResponse = findStoredIdempotentResponse(idempotencyKey, requestFingerprint);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
         }
 
         if (senderAccountNumber.equals(recipientAccountNumber)) {
